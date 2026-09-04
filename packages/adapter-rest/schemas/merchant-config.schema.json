@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "$id": "https://agentify.dev/schemas/merchant-config.schema.json",
+  "title": "Agentify merchant REST adapter config",
+  "type": "object",
+  "required": ["id", "merchant", "http", "catalog", "mappings"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "merchant": {
+      "type": "object",
+      "required": ["name", "defaultCurrency"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "supportEmail": { "type": "string" },
+        "country": { "type": "string" },
+        "defaultCurrency": { "type": "string", "pattern": "^[A-Za-z]{3}$" }
+      }
+    },
+    "http": {
+      "type": "object",
+      "required": ["baseUrl"],
+      "properties": {
+        "baseUrl": { "type": "string", "format": "uri" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "auth": {
+          "type": "object",
+          "oneOf": [
+            { "properties": { "type": { "const": "none" } } },
+            { "required": ["type", "token"], "properties": { "type": { "const": "bearer" }, "token": { "type": "string" } } },
+            { "required": ["type", "header", "key"], "properties": { "type": { "const": "apiKey" }, "header": { "type": "string" }, "key": { "type": "string" } } }
+          ]
+        },
+        "headers": { "type": "object" }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "required": ["search", "productUrl", "variantUrl"],
+      "properties": {
+        "search": {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": { "type": "string" },
+            "query": { "type": "object" },
+            "itemsPath": { "type": "string" },
+            "totalPath": { "type": "string" },
+            "cursorPath": { "type": "string" },
+            "pageSize": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "productUrl": { "type": "string" },
+        "variantUrl": { "type": "string" },
+        "offerUrl": { "type": "string" },
+        "stockUrl": { "type": "string" }
+      }
+    },
+    "mappings": {
+      "type": "object",
+      "required": ["product"],
+      "properties": {
+        "product": {
+          "type": "object",
+          "required": ["id", "title"],
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "description": { "type": "string" },
+            "category": { "type": "string" },
+            "brand": { "type": "string" },
+            "images": { "type": "string" },
+            "attributes": { "type": "object" },
+            "variants": {
+              "type": "object",
+              "required": ["path", "each"],
+              "properties": {
+                "path": { "type": "string" },
+                "each": {
+                  "type": "object",
+                  "required": ["id", "listPrice", "availability"],
+                  "properties": {
+                    "id": { "type": "string" },
+                    "sku": { "type": "string" },
+                    "listPrice": { "type": "object", "required": ["path"], "properties": { "path": { "type": "string" }, "unit": { "enum": ["major", "minor"] }, "currency": { "type": "string" } } },
+                    "salePrice": { "type": "object", "required": ["path"] },
+                    "availability": { "type": "object", "required": ["path"], "properties": { "path": { "type": "string" } } }
+                  }
+                }
+              }
+            },
+            "singleVariant": { "type": "object" }
+          }
+        },
+        "offer": { "type": "object" }
+      }
+    }
+  }
+}
