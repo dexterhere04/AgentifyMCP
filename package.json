@@ -1,0 +1,31 @@
+{
+  "name": "agentcart",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic Commerce Gateway monorepo - turn any ecommerce backend into an agent-native merchant",
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "gateway": "tsx apps/gateway/src/run.ts",
+    "demo": "tsx scripts/agent-demo.ts"
+  },
+  "devDependencies": {
+    "@gateway/adapter-mock": "workspace:*",
+    "@gateway/app-gateway": "workspace:*",
+    "@gateway/canonical-commerce": "workspace:*",
+    "@gateway/mcp": "workspace:*",
+    "@gateway/metadata": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@hono/node-server": "^1.14.0",
+    "@types/node": "^26.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0",
+    "vitest": "^5.0.0"
+  }
+}
