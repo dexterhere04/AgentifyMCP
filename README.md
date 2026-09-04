@@ -34,6 +34,7 @@ API, map your product fields, and run `pnpm gateway`.
 | SDK adapter | Implement `CommerceProvider` in code | `@agentify/canonical-commerce` |
 | Framework mount | Express / Fastify / Next / Hono | `@agentify/middleware` |
 | Standalone | `pnpm gateway` / Docker | `Dockerfile` |
+| Local dashboard | configure, test, run, audit via a UI | `apps/dashboard` |
 | CLI | `agentify init` (wizard), `generate` (static files) | `@agentify/cli` |
 | Static / edge | emit `llms.txt`/`agents.md`/`ucp` + catalog JSON | `agentify generate` |
 

@@ -9,3 +9,4 @@ data/
 coverage/
 docs/.vitepress/cache
 docs/.vitepress/dist
+apps/dashboard/web-dist

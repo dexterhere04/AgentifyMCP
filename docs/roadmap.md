@@ -16,7 +16,7 @@ Status of the architecture doc's MVP plan.
 | 4 | OpenAPI-assisted integration | 🔜 |
 | 5 | Catalog index + semantic search | 🔜 |
 | 6 | Full checkout fidelity (shipping/coupon, state machine polish) | 🔜 |
-| 8 | Integration dashboard + multi-tenant | 🔜 |
+| 8 | Local integration dashboard (config · test · run · audit) | ✅ local / 🔜 hosted multi-tenant |
 | 9 | Revenue intelligence (upsell/cross-sell) | 🔜 |
 
 ## Distribution (this effort)

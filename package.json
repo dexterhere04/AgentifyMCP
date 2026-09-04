@@ -21,7 +21,9 @@
     "clean": "pnpm -r --if-present run clean",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs && node scripts/postbuild-docs.mjs",
-    "demo:audit": "tsx scripts/audit-demo.ts"
+    "dashboard": "tsx apps/dashboard/src/api/index.ts",
+    "dashboard:web": "pnpm exec vite --config apps/dashboard/ui/vite.config.ts",
+    "dashboard:build": "pnpm exec vite build --config apps/dashboard/ui/vite.config.ts"
   },
   "devDependencies": {
     "@agentify/adapter-mock": "workspace:*",

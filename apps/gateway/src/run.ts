@@ -1,5 +1,11 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { serve } from "@hono/node-server";
+import type { CommerceProvider } from "@agentify/canonical-commerce";
+import {
+  RestCommerceProvider,
+  validateRestConfig,
+  type RestAdapterConfig,
+} from "@agentify/adapter-rest";
 import { razorpayGatewayFromEnv } from "@agentify/payments-razorpay";
 import { createGateway } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -13,6 +19,9 @@ if (existsSync(".env") && typeof process.loadEnvFile === "function") {
  * Gateway server entry point. Run with `pnpm gateway` (root) or
  * `pnpm --filter @agentify/gateway start`.
  *
+ * Connect a REST merchant by pointing MERCHANT_CONFIG at a config file; omit
+ * it to run the built-in demo merchant.
+ *
  * Payment (Razorpay test mode) is enabled when RAZORPAY_KEY_ID /
  * RAZORPAY_KEY_SECRET are set:
  *   RAZORPAY_KEY_ID         rzp_test_...
@@ -24,9 +33,23 @@ async function main(): Promise<void> {
   try {
     const config = loadConfig();
     const razorpay = razorpayGatewayFromEnv();
+
+    let provider: CommerceProvider | undefined;
+    if (process.env.MERCHANT_CONFIG) {
+      const raw = readFileSync(process.env.MERCHANT_CONFIG, "utf8");
+      const merchantConfig = JSON.parse(raw) as RestAdapterConfig;
+      const errors = validateRestConfig(merchantConfig);
+      if (errors.length > 0) {
+        throw new Error(`invalid MERCHANT_CONFIG:\n- ${errors.join("\n- ")}`);
+      }
+      provider = new RestCommerceProvider(merchantConfig);
+      console.log(`[gateway] merchant      : ${merchantConfig.merchant.name} (${merchantConfig.http.baseUrl})`);
+    }
+
     console.log(`[gateway] booting, base URL ${config.baseUrl}`);
     const gateway = await createGateway({
       config,
+      ...(provider ? { provider } : {}),
       ...(razorpay ? { payment: { gateway: razorpay, handlerName: "dev.agentify.razorpay.test" } } : {}),
     });
 

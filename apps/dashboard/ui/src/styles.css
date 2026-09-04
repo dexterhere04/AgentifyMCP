@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f7f9; color: #1a202c; }
+a { color: #0b66c3; text-decoration: none; }
+.topbar {
+  display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+  background: #0b66c3; color: #fff;
+}
+.topbar .logo { font-weight: 700; font-size: 18px; }
+.topbar a { color: #fff; opacity: .9; }
+.page { max-width: 1100px; margin: 0 auto; padding: 20px; }
+.card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 16px; margin: 12px 0;
+}
+.card h2 { margin: 0 0 8px; font-size: 15px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grow { flex: 1; }
+button {
+  border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  background: #eef2f7; font-size: 14px;
+}
+button.primary { background: #0b66c3; color: #fff; }
+button.danger { background: #fee2e2; color: #b91c1c; }
+button.small { padding: 4px 10px; font-size: 13px; }
+button:disabled { opacity: .5; cursor: default; }
+input, textarea, select {
+  width: 100%; border: 1px solid #d4dae3; border-radius: 8px; padding: 8px 10px;
+  font: inherit;
+}
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+label { display: block; margin: 10px 0 4px; font-size: 13px; color: #4a5568; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid #edf0f4; vertical-align: top; }
+th { color: #718096; font-weight: 600; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.badge.on { background: #def7e5; color: #065f46; }
+.badge.off { background: #edf0f4; color: #718096; }
+.err { color: #b91c1c; background: #fef2f2; padding: 8px 10px; border-radius: 8px; white-space: pre-wrap; }
+.ok { color: #065f46; }
+.muted { color: #718096; font-size: 13px; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+pre.json { background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 8px; overflow: auto; font-size: 12px; }
+.logbox { background: #0f172a; color: #a5f3fc; padding: 10px; border-radius: 8px; font-size: 12px; overflow: auto; max-height: 220px; font-family: ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.tabs { display: flex; gap: 6px; margin: 6px 0; }
+.tabs button.active { background: #0b66c3; color: #fff; }
+.pill { cursor: pointer; }
