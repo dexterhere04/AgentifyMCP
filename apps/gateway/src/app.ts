@@ -1,6 +1,10 @@
 import { Hono, type Context } from "hono";
 import { createMockCommerceProvider } from "@gateway/adapter-mock";
-import { detectCapabilities, type CommerceProvider, isProviderError } from "@gateway/canonical-commerce";
+import {
+  detectCapabilities,
+  type CommerceProvider,
+  isProviderError,
+} from "@gateway/canonical-commerce";
 import { createMetadata, type GeneratedMetadata } from "@gateway/metadata";
 import {
   createStreamableHttpEndpoint,
@@ -8,6 +12,11 @@ import {
   SERVER_VERSION,
   type StreamableHttpEndpoint,
 } from "@gateway/mcp";
+import {
+  assertValidUcpProfile,
+  buildUcpProfile,
+  type BusinessDiscoveryProfile,
+} from "@gateway/ucp";
 import { loadConfig, type GatewayConfig } from "./config.js";
 
 export interface Gateway {
@@ -16,6 +25,8 @@ export interface Gateway {
   provider: CommerceProvider;
   metadata: GeneratedMetadata;
   mcp: StreamableHttpEndpoint;
+  /** The UCP business discovery profile served at /.well-known/ucp. */
+  ucpProfile: BusinessDiscoveryProfile;
 }
 
 export interface CreateGatewayOptions {
@@ -36,15 +47,22 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
   const mcp = createStreamableHttpEndpoint(provider);
   const capabilities = detectCapabilities(provider);
 
+  // UCP business discovery profile. Built and validated at startup so a
+  // malformed/inconsistent configuration fails fast instead of serving an
+  // invalid discovery document.
+  const ucpProfile = buildUcpProfile({ capabilities, baseUrl: config.baseUrl });
+  assertValidUcpProfile(ucpProfile);
+
   const app = new Hono();
 
   app.get("/", (c) =>
     c.json({
       service: SERVER_NAME,
       version: SERVER_VERSION,
-      description: "Agentic Commerce Gateway (MVP 0 + MVP 1)",
+      description: "Agentic Commerce Gateway (MVP 0 + MVP 1 + MVP 2)",
       endpoints: {
         mcp: `${config.baseUrl}/mcp`,
+        ucp: `${config.baseUrl}/.well-known/ucp`,
         agentsMd: `${config.baseUrl}/agents.md`,
         llmsTxt: `${config.baseUrl}/llms.txt`,
       },
@@ -59,6 +77,14 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
   );
 
   app.all("/mcp", (c) => mcp.handle(c.req.raw));
+
+  app.get("/.well-known/ucp", (c) =>
+    c.json(ucpProfile, 200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+    }),
+  );
 
   app.get("/agents.md", (c) =>
     c.text(metadata.agentsMarkdown(), 200, {
@@ -116,7 +142,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     return c.json({ error: { code: "INTERNAL", message: err.message } });
   });
 
-  return { app, config, provider, metadata, mcp };
+  return { app, config, provider, metadata, mcp, ucpProfile };
 }
 
 function providerErrorResponse(c: Context, err: unknown): Response {
