@@ -22,6 +22,7 @@ import { serve } from "@hono/node-server";
 import { createGateway, type Gateway } from "@gateway/app-gateway";
 
 const BUDGET_MINOR = 500000; // Rs 5,000 in paise
+const AGENT_PROFILE = "https://agent.example/.well-known/ucp";
 
 function inr(amount: number): string {
   return `₹${(amount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -60,15 +61,41 @@ async function main(): Promise<void> {
   const endpoints = (await index.json()) as { endpoints: Record<string, string>; capabilities: string[] };
   console.log(JSON.stringify(endpoints, null, 2));
 
-  step("2 · MCP initialize + 3 · tools/list");
-  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
+  step("2 · Fetch the UCP business discovery profile (/.well-known/ucp)");
+  const ucpRes = await fetch(`${baseUrl.replace(/\/+$/, "")}/.well-known/ucp`);
+  const ucp = (await ucpRes.json()) as {
+    ucp: {
+      version: string;
+      services: Record<string, Array<{ transport: string; endpoint: string }>>;
+      capabilities: Record<string, unknown>;
+    };
+  };
+  console.log(`UCP version: ${ucp.ucp.version}`);
+  console.log(`Advertised capabilities: ${Object.keys(ucp.ucp.capabilities).join(", ") || "(none)"}`);
+  const mcpBinding = (ucp.ucp.services["dev.ucp.shopping"] ?? []).find((s) => s.transport === "mcp");
+  if (!mcpBinding) throw new Error("UCP profile does not advertise an MCP service");
+  console.log(`MCP service endpoint (from profile): ${mcpBinding.endpoint}`);
+  // In self-contained demo mode the profile advertises the public origin
+  // (https://demo.example), which is not reachable from localhost — rebase the
+  // discovered endpoint onto the live server origin for the demo run.
+  let resolvedMcpUrl = mcpBinding.endpoint;
+  if (!explicitUrl) {
+    const local = new URL(baseUrl);
+    const rebased = new URL(mcpBinding.endpoint);
+    rebased.protocol = local.protocol;
+    rebased.host = local.host;
+    resolvedMcpUrl = rebased.toString();
+  }
+
+  step("3 · MCP initialize + 4 · tools/list");
+  const transport = new StreamableHTTPClientTransport(new URL(resolvedMcpUrl));
   const client = new Client({ name: "headless-demo-agent", version: "0.1.0" });
   await client.connect(transport);
   const tools = await client.listTools();
   const toolNames = tools.tools.map((t) => t.name);
   console.log(`server negotiated, available tools: ${toolNames.join(", ")}`);
 
-  step("4 · search_catalog — elegant necklace under Rs 5,000, in stock, anniversary");
+  step("5 · search_catalog — elegant necklace under Rs 5,000, in stock, anniversary");
   const searchRes = await client.callTool({
     name: "search_catalog",
     arguments: {
@@ -92,7 +119,7 @@ async function main(): Promise<void> {
   const candidate = search.items[0]!;
   console.log(`\nAgent selects first within budget: "${candidate.title}" (productId=${candidate.id})`);
 
-  step("5 · get_product — inspect variants");
+  step("6 · get_product — inspect variants");
   const productRes = await client.callTool({
     name: "get_product",
     arguments: { productId: candidate.id },
@@ -106,7 +133,7 @@ async function main(): Promise<void> {
   console.log(textOf(productRes).split("\n").slice(0, 4).join("\n"));
   console.log(`\nAgent picks variant ${variant.id}${variant.sku ? ` (sku ${variant.sku})` : ""}`);
 
-  step("6 · check_availability (live)");
+  step("7 · check_availability (live)");
   const availRes = await client.callTool({
     name: "check_availability",
     arguments: { variantId: variant.id },
@@ -117,7 +144,7 @@ async function main(): Promise<void> {
     throw new Error("variant unexpectedly unavailable");
   }
 
-  step("7 · get_offer (live discounted price)");
+  step("8 · get_offer (live discounted price)");
   const offerRes = await client.callTool({
     name: "get_offer",
     arguments: { variantId: variant.id, currency: "INR" },
@@ -136,7 +163,7 @@ async function main(): Promise<void> {
   }>(offerRes);
   console.log(textOf(offerRes));
 
-  step("8 · Final recommendation (respecting the Rs 5,000 budget)");
+  step("9 · Final recommendation (respecting the Rs 5,000 budget)");
   if (offer.price.amount > BUDGET_MINOR) {
     throw new Error("agent violated the buyer budget");
   }
@@ -156,6 +183,37 @@ async function main(): Promise<void> {
   console.log(`  Budget  : ${inr(BUDGET_MINOR)} — within budget ✓`);
   console.log("\nRecommendation (in-stock, live-verified):");
   console.log(`  "A ${title} at ${inr(offer.price.amount)} is within your ₹5,000 budget. Shall I add it to your cart?"`);
+
+  step("10 · Transact (catalog + cart + checkout) with meta.ucp-agent");
+  const agentMeta = { "ucp-agent": { profile: `${AGENT_PROFILE}` } };
+
+  const cartRes = await client.callTool({ name: "create_cart", arguments: { meta: agentMeta } });
+  const cart = structuredOf<{ id: string; currency: string }>(cartRes);
+  console.log(`create_cart → ${cart.id}`);
+
+  const addRes = await client.callTool({
+    name: "add_to_cart",
+    arguments: { meta: agentMeta, cartId: cart.id, variantId: offer.variantId, quantity: 1 },
+  });
+  const cartAfterAdd = structuredOf<{ items: unknown[]; subtotal: { amount: number } }>(addRes);
+  console.log(`add_to_cart → ${cartAfterAdd.items.length} line(s), subtotal ${inr(cartAfterAdd.subtotal.amount)}`);
+
+  const chkRes = await client.callTool({
+    name: "create_checkout",
+    arguments: { meta: agentMeta, cartId: cart.id },
+  });
+  const checkout = structuredOf<{ id: string; status: string }>(chkRes);
+  console.log(`create_checkout → ${checkout.id} [${checkout.status}]`);
+
+  const doneRes = await client.callTool({
+    name: "complete_checkout",
+    arguments: { meta: agentMeta, checkoutId: checkout.id, approval: { buyerApproved: true } },
+  });
+  const order = structuredOf<{ id: string; checkoutId: string; status: string; total?: { amount: number } }>(doneRes);
+  console.log(`complete_checkout (buyer approved) → order ${order.id} [${order.status}]`);
+  if (order.total) console.log(`  Order total: ${inr(order.total.amount)}`);
+  console.log("\nDemo complete: an independent agent discovered, searched, priced, carted, checked out,");
+  console.log("and completed a purchase through the gateway with live verification at every step.");
 
   await client.close();
   if (gateway) await gateway.mcp.close();
