@@ -16,6 +16,23 @@ This is the agent-side counterpart to the store-side surfaces:
 
 ---
 
+## When to use
+
+Use this skill when:
+
+- The buyer wants to discover or purchase products from an Agentify-powered store.
+- The store exposes an Agentify UCP discovery profile.
+- The store's UCP profile advertises an MCP service.
+- The agent needs to search products, verify live offers, manage a cart,
+  create checkout, or retrieve an order.
+
+Do not use this skill when:
+
+- The store does not expose Agentify/UCP discovery.
+- The task is unrelated to shopping.
+- The buyer has not authorized a purchase when purchase completion is required.
+- Payment requires the agent to directly collect card or banking credentials.
+
 ## 1 · Discovery (per store)
 
 1. Fetch the store's discovery profile:
@@ -114,6 +131,40 @@ get_order { meta, orderId }
 `orderId` once completed.)
 
 ---
+
+## Operation classes
+
+### Read-only operations
+
+These do not modify the buyer's purchase state:
+
+- `search_catalog`
+- `get_product`
+- `get_variant`
+- `check_availability`
+- `get_offer`
+- `get_cart`
+- `get_checkout`
+- `get_order`
+
+### State-changing operations
+
+These modify commerce state:
+
+- `create_cart`
+- `add_to_cart`
+- `create_checkout`
+
+### Purchase operation
+
+`complete_checkout` is the only operation that may initiate the purchase
+process and therefore requires explicit contemporaneous buyer approval. If
+buyer approval is absent:
+
+1. Do not call `complete_checkout`.
+2. Keep the checkout/cart state intact if possible.
+3. Present the current checkout total and relevant payment information.
+4. Ask the buyer whether they want to proceed.
 
 ## 4 · Money rules
 
