@@ -100,6 +100,15 @@ describe("MCP protocol over Streamable HTTP", () => {
       "get_variant",
       "check_availability",
       "get_offer",
+      "create_cart",
+      "get_cart",
+      "add_to_cart",
+      "update_cart_item",
+      "remove_from_cart",
+      "create_checkout",
+      "get_checkout",
+      "complete_checkout",
+      "cancel_checkout",
     ]);
     await gateway.mcp.close();
   });
@@ -163,10 +172,99 @@ describe("MCP protocol over Streamable HTTP", () => {
   it("unknown tool name is rejected", async () => {
     const gateway = await startGateway();
     const sid = await newSession(gateway);
-    const call = await sendRpc(gateway, "tools/call", { name: "complete_checkout", arguments: {} }, sid);
+    const call = await sendRpc(gateway, "tools/call", { name: "get_order", arguments: { id: "x" } }, sid);
     const result = (call.payload as JsonRpcResponse).result as { isError?: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain("Unknown tool");
+    await gateway.mcp.close();
+  });
+
+  it("runs a full agent flow: search → offer → cart → checkout → order", async () => {
+    const gateway = await startGateway();
+    const sid = await newSession(gateway);
+    const meta = { "ucp-agent": { profile: "https://agent.example/.well-known/ucp" } };
+
+    // 1. catalog read stays open without meta
+    const search = await sendRpc(
+      gateway,
+      "tools/call",
+      { name: "search_catalog", arguments: { query: "necklace", inStockOnly: true, maxPriceMinor: 500000, limit: 3 } },
+      sid,
+    );
+    const searchResult = (search.payload as JsonRpcResponse).result as {
+      structuredContent?: { items: Array<{ id: string }> };
+    };
+    expect(searchResult.structuredContent?.items.length).toBeGreaterThan(0);
+
+    // 2. transactional calls REQUIRE meta.ucp-agent.profile
+    const noMeta = await sendRpc(gateway, "tools/call", { name: "create_cart", arguments: {} }, sid);
+    const noMetaResult = (noMeta.payload as JsonRpcResponse).result as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
+    expect(noMetaResult.isError).toBe(true);
+    expect(noMetaResult.content[0]!.text).toContain("meta");
+
+    // 3. cart lifecycle
+    const created = await sendRpc(
+      gateway,
+      "tools/call",
+      { name: "create_cart", arguments: { meta } },
+      sid,
+    );
+    const cartId = ((created.payload as JsonRpcResponse).result as {
+      structuredContent: { id: string };
+    }).structuredContent.id;
+    const added = await sendRpc(
+      gateway,
+      "tools/call",
+      { name: "add_to_cart", arguments: { meta, cartId, variantId: "neck-anniversary-18", quantity: 1 } },
+      sid,
+    );
+    const addedResult = (added.payload as JsonRpcResponse).result as {
+      structuredContent?: { subtotal: { amount: number } };
+      _meta?: { "ucp-agent"?: { profile?: string } };
+    };
+    expect(addedResult.structuredContent?.subtotal.amount).toBe(399900);
+    expect(addedResult._meta?.["ucp-agent"]?.profile).toBe("https://agent.example/.well-known/ucp");
+
+    // 4. checkout + order (with explicit approval)
+    const chk = await sendRpc(
+      gateway,
+      "tools/call",
+      { name: "create_checkout", arguments: { meta, cartId } },
+      sid,
+    );
+    const checkoutId = ((chk.payload as JsonRpcResponse).result as {
+      structuredContent: { id: string };
+    }).structuredContent.id;
+    const done = await sendRpc(
+      gateway,
+      "tools/call",
+      {
+        name: "complete_checkout",
+        arguments: { meta, checkoutId, approval: { buyerApproved: true } },
+      },
+      sid,
+    );
+    const order = (done.payload as JsonRpcResponse).result as {
+      structuredContent?: { id: string; checkoutId: string; status: string; total: { amount: number } };
+    };
+    expect(order.structuredContent?.checkoutId).toBe(checkoutId);
+    expect(order.structuredContent?.status).toBe("confirmed");
+    expect(order.structuredContent?.total.amount).toBe(399900);
+
+    // stock was decremented by the completed order
+    const avail = await sendRpc(
+      gateway,
+      "tools/call",
+      { name: "check_availability", arguments: { variantId: "neck-anniversary-18" } },
+      sid,
+    );
+    const availResult = (avail.payload as JsonRpcResponse).result as {
+      structuredContent?: { quantity: number };
+    };
+    expect(availResult.structuredContent?.quantity).toBe(11);
     await gateway.mcp.close();
   });
 
@@ -238,7 +336,49 @@ describe("gateway HTTP surfaces", () => {
     const index = await gateway.app.request("/");
     const body = (await index.json()) as { endpoints: Record<string, string>; capabilities: string[] };
     expect(body.endpoints.mcp).toContain("/mcp");
-    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing"]);
+    expect(body.endpoints.ucp).toContain("/.well-known/ucp");
+    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing", "cart", "checkout"]);
+    await gateway.mcp.close();
+  });
+
+  it("serves the UCP business discovery profile", async () => {
+    const gateway = await startGateway();
+    const res = await gateway.app.request("/.well-known/ucp");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    const profile = (await res.json()) as {
+      ucp: {
+        version: string;
+        services: Record<string, Array<{ transport: string; endpoint: string }>>;
+        capabilities: Record<string, unknown>;
+        payment_handlers: unknown;
+      };
+    };
+    // protocol version + MIME are covered above; verify capability/transport truth
+    expect(profile.ucp.version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(profile.ucp.services["dev.ucp.shopping"]).toBeDefined();
+    const shopping = profile.ucp.services["dev.ucp.shopping"]![0]!;
+    expect(shopping.transport).toBe("mcp");
+    expect(shopping.endpoint).toBe("https://demo.example/mcp");
+    expect(profile.ucp.capabilities["dev.ucp.shopping.catalog.search"]).toBeDefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.catalog.lookup"]).toBeDefined();
+    // the merchant supports cart + checkout, but not orders or payments
+    expect(profile.ucp.capabilities["dev.ucp.shopping.cart"]).toBeDefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.checkout"]).toBeDefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.order"]).toBeUndefined();
+    expect(profile.ucp.payment_handlers).toEqual({});
+    await gateway.mcp.close();
+  });
+
+  it("reflects the merchant's supported capabilities in agents.md and llms.txt", async () => {
+    const gateway = await startGateway();
+    const agents = await gateway.app.request("/agents.md");
+    const agentsText = await agents.text();
+    expect(agentsText).toContain("UCP discovery profile");
+    const llms = await gateway.app.request("/llms.txt");
+    const llmsText = await llms.text();
+    expect(llmsText).toContain("[UCP discovery profile](https://demo.example/.well-known/ucp)");
     await gateway.mcp.close();
   });
 
@@ -302,6 +442,18 @@ describe("second merchant with a different shape", () => {
       (t) => t.name,
     );
     expect(names).toEqual(["search_catalog", "get_product", "get_variant"]);
+
+    // The UCP discovery profile must also only advertise catalog capabilities.
+    const profileRes = await gateway.app.request("/.well-known/ucp");
+    const profile = (await profileRes.json()) as {
+      ucp: {
+        services: Record<string, unknown>;
+        capabilities: Record<string, unknown>;
+      };
+    };
+    expect(profile.ucp.services["dev.ucp.shopping"]).toBeDefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.catalog.search"]).toBeDefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.cart"]).toBeUndefined();
 
     const call = await sendRpc(
       gateway,
