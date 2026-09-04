@@ -1,11 +1,16 @@
+import { randomUUID } from "node:crypto";
 import {
   buildMerchant,
   computeBestPrice,
   fromMinor,
+  type AddCartItemInput,
   type Availability,
   type AvailabilityStatus,
+  type Cart,
+  type CartItem,
   type CatalogSearchInput,
   type CatalogSearchResult,
+  type Checkout,
   type CommerceProvider,
   type Discount,
   type DiscountScope,
@@ -13,8 +18,10 @@ import {
   type Merchant,
   type Offer,
   type OfferInput,
+  type Order,
   type Product,
   type ProductSummary,
+  type TransactionMeta,
   type Variant,
   malformedRecord,
   notFound,
@@ -81,6 +88,27 @@ const STOCK_RANK: Record<AvailabilityStatus, number> = {
   out_of_stock: 3,
 };
 
+/** Internal persisted cart row (canonical Cart plus negotiation/audit metadata). */
+interface CartRecord {
+  cart: Cart;
+  agentProfile?: string;
+}
+
+/** Internal persisted checkout row (canonical Checkout plus cart + metadata). */
+interface CheckoutRecord {
+  checkout: Checkout;
+  cartId: string;
+  agentProfile?: string;
+}
+
+function minorMoney(amount: number, currency: string): { amount: number; currency: string } {
+  return fromMinor(amount, currency);
+}
+
+function lineTotal(item: CartItem): number {
+  return item.unitPrice.amount * item.quantity;
+}
+
 export class MockCommerceProvider implements CommerceProvider {
   readonly id = "mock-merchant";
   private readonly db;
@@ -95,6 +123,12 @@ export class MockCommerceProvider implements CommerceProvider {
   catalog: CommerceProvider["catalog"];
   inventory: CommerceProvider["inventory"];
   pricing: CommerceProvider["pricing"];
+  cart: CommerceProvider["cart"];
+  checkout: CommerceProvider["checkout"];
+
+  private readonly cartRecords = new Map<string, CartRecord>();
+  private readonly checkoutRecords = new Map<string, CheckoutRecord>();
+  private readonly orderStore = new Map<string, Order>();
 
   constructor(options: MockCommerceProviderOptions = {}) {
     this.opts = options;
@@ -115,6 +149,19 @@ export class MockCommerceProvider implements CommerceProvider {
     };
     this.pricing = {
       getOffer: (input) => this.getOffer(input),
+    };
+    this.cart = {
+      create: (input) => this.createCart(input),
+      get: (cartId) => this.getCart(cartId),
+      addItem: (input) => this.addCartItem(input),
+      updateItem: (input) => this.updateCartItem(input),
+      removeItem: (input) => this.removeCartItem(input),
+    };
+    this.checkout = {
+      create: (input) => this.createCheckout(input),
+      get: (id) => this.getCheckout(id),
+      complete: (id, options) => this.completeCheckout(id, options),
+      cancel: (id, options) => this.cancelCheckout(id, options),
     };
   }
 
@@ -541,6 +588,271 @@ export class MockCommerceProvider implements CommerceProvider {
     }
 
     throw invalidArgument("pricing.getOffer requires productId or variantId");
+  }
+
+  // -------------------------------------------------------------------------
+  // CommerceProvider: cart
+  // -------------------------------------------------------------------------
+
+  private requireCartRecord(cartId: string): CartRecord {
+    const record = this.cartRecords.get(cartId);
+    if (!record) throw notFound("cart", cartId);
+    return record;
+  }
+
+  private recomputeCart(record: CartRecord): Cart {
+    const totalMinor = record.cart.items.reduce((sum, item) => sum + lineTotal(item), 0);
+    record.cart.subtotal = minorMoney(totalMinor, record.cart.currency);
+    record.cart.updatedAt = this.now();
+    return record.cart;
+  }
+
+  private assertValidQuantity(quantity: number): void {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      throw invalidArgument(`quantity must be a positive integer; got ${quantity}`);
+    }
+  }
+
+  /** Live-safety check: the variant must be sellable and have enough stock. */
+  private async requireSellableOffer(variantId: string, requestedQuantity: number): Promise<Offer> {
+    const offer = await this.getOffer({ variantId });
+    const avail = offer.availability;
+    const sellable = avail.status === "in_stock" || avail.status === "limited";
+    if (!sellable) {
+      throw invalidArgument(
+        `variant "${variantId}" is ${avail.status} and cannot be added to a cart`,
+        { variantId, status: avail.status },
+      );
+    }
+    if (avail.quantity !== undefined && requestedQuantity > avail.quantity) {
+      throw invalidArgument(
+        `variant "${variantId}" has only ${avail.quantity} available; requested ${requestedQuantity}`,
+        { variantId, requested: requestedQuantity, available: avail.quantity },
+      );
+    }
+    return offer;
+  }
+
+  async createCart(input?: { currency?: string } & TransactionMeta): Promise<Cart> {
+    await this.throttle();
+    const currency = input?.currency ?? "INR";
+    if (currency !== "INR") {
+      throw invalidArgument(`currency ${currency} is not supported by this merchant`, {
+        supported: ["INR"],
+      });
+    }
+    const expiresAt = new Date(Date.parse(this.now()) + 24 * 60 * 60 * 1000).toISOString();
+    const cart: Cart = {
+      id: `cart_${randomUUID()}`,
+      status: "active",
+      currency,
+      items: [],
+      subtotal: minorMoney(0, currency),
+      updatedAt: this.now(),
+      expiresAt,
+    };
+    this.cartRecords.set(cart.id, { cart, agentProfile: input?.agentProfile });
+    return cart;
+  }
+
+  async getCart(cartId: string): Promise<Cart> {
+    await this.throttle();
+    return this.requireCartRecord(cartId).cart;
+  }
+
+  async addCartItem(input: AddCartItemInput & TransactionMeta): Promise<Cart> {
+    await this.throttle();
+    if (!input.cartId) throw invalidArgument("cartId is required to add an item");
+    this.assertValidQuantity(input.quantity);
+    this.checkFault(input.variantId);
+    const record = this.requireCartRecord(input.cartId);
+    if (record.cart.status !== "active") {
+      throw invalidArgument(`cart "${record.cart.id}" is ${record.cart.status} and cannot be modified`);
+    }
+
+    const existing = record.cart.items.find((item) => item.variantId === input.variantId);
+    const desired = (existing?.quantity ?? 0) + input.quantity;
+    const offer = await this.requireSellableOffer(input.variantId, desired);
+
+    if (existing) {
+      existing.quantity = desired;
+    } else {
+      const item: CartItem = {
+        id: `line_${randomUUID()}`,
+        variantId: offer.variantId,
+        productId: offer.productId,
+        title: offer.productTitle,
+        unitPrice: offer.price,
+        quantity: input.quantity,
+        ...(offer.sku ? { sku: offer.sku } : {}),
+        ...(offer.image ? { image: offer.image } : {}),
+      };
+      record.cart.items.push(item);
+    }
+    return this.recomputeCart(record);
+  }
+
+  async updateCartItem(
+    input: { cartId?: string; itemId: string; quantity: number } & TransactionMeta,
+  ): Promise<Cart> {
+    await this.throttle();
+    if (!input.cartId) throw invalidArgument("cartId is required to update an item");
+    if (input.quantity <= 0) {
+      return this.removeCartItem({ cartId: input.cartId, itemId: input.itemId });
+    }
+    this.assertValidQuantity(input.quantity);
+    const record = this.requireCartRecord(input.cartId);
+    const item = record.cart.items.find((i) => i.id === input.itemId);
+    if (!item) throw notFound("cart item", input.itemId);
+    const offer = await this.requireSellableOffer(item.variantId, input.quantity);
+    void offer;
+    item.quantity = input.quantity;
+    return this.recomputeCart(record);
+  }
+
+  async removeCartItem(input: { cartId?: string; itemId: string } & TransactionMeta): Promise<Cart> {
+    await this.throttle();
+    if (!input.cartId) throw invalidArgument("cartId is required to remove an item");
+    const record = this.requireCartRecord(input.cartId);
+    const index = record.cart.items.findIndex((i) => i.id === input.itemId);
+    if (index === -1) throw notFound("cart item", input.itemId);
+    record.cart.items.splice(index, 1);
+    return this.recomputeCart(record);
+  }
+
+  // -------------------------------------------------------------------------
+  // CommerceProvider: checkout
+  // -------------------------------------------------------------------------
+
+  private requireCheckoutRecord(id: string): CheckoutRecord {
+    const record = this.checkoutRecords.get(id);
+    if (!record) throw notFound("checkout", id);
+    return record;
+  }
+
+  private decrementStock(variantId: string, quantity: number): void {
+    const result = this.db
+      .prepare(
+        `UPDATE variants
+           SET stock_qty = COALESCE(stock_qty, 0) - ?,
+               stock_status = CASE WHEN COALESCE(stock_qty, 0) - ? <= 0 THEN 'out_of_stock' ELSE stock_status END
+         WHERE id = ? AND stock_qty >= ?`,
+      )
+      .run(quantity, quantity, variantId, quantity);
+    if (result.changes !== 1) {
+      throw invalidArgument(`insufficient stock for variant "${variantId}"`, { variantId });
+    }
+  }
+
+  async createCheckout(input: { cartId: string } & TransactionMeta): Promise<Checkout> {
+    await this.throttle();
+    const record = this.requireCartRecord(input.cartId);
+    if (record.cart.status !== "active") {
+      throw invalidArgument(`cart "${record.cart.id}" is ${record.cart.status} and cannot be checked out`);
+    }
+    if (record.cart.items.length === 0) {
+      throw invalidArgument("cannot start a checkout from an empty cart");
+    }
+
+    const totals = {
+      subtotal: record.cart.subtotal,
+      total: record.cart.subtotal,
+      currency: record.cart.currency,
+    };
+    const expiresAt = new Date(Date.parse(this.now()) + 30 * 60 * 1000).toISOString();
+    const checkout: Checkout = {
+      id: `chk_${randomUUID()}`,
+      status: "created",
+      currency: record.cart.currency,
+      totals,
+      updatedAt: this.now(),
+      expiresAt,
+    };
+    this.checkoutRecords.set(checkout.id, {
+      checkout,
+      cartId: record.cart.id,
+      agentProfile: input.agentProfile,
+    });
+    return checkout;
+  }
+
+  async getCheckout(id: string): Promise<Checkout> {
+    await this.throttle();
+    return this.requireCheckoutRecord(id).checkout;
+  }
+
+  async completeCheckout(
+    id: string,
+    options?: { approval?: { buyerApproved: boolean } } & TransactionMeta,
+  ): Promise<Order> {
+    await this.throttle();
+    const record = this.requireCheckoutRecord(id);
+    const checkout = record.checkout;
+
+    // Idempotent: completing an already-completed checkout returns its order.
+    if (checkout.status === "completed" && checkout.orderId) {
+      const order = this.orderStore.get(checkout.orderId);
+      if (order) return order;
+    }
+
+    if (checkout.status !== "created" && checkout.status !== "awaiting_approval") {
+      throw invalidArgument(`checkout "${id}" is ${checkout.status} and cannot be completed`);
+    }
+    if (options?.approval?.buyerApproved !== true) {
+      throw invalidArgument(
+        "checkout requires explicit buyer approval (approval.buyerApproved = true) before completion",
+      );
+    }
+
+    const cartRecord = this.cartRecords.get(record.cartId);
+    const items = cartRecord?.cart.items ?? [];
+
+    // Verify every line still has stock before committing (graceful failure).
+    for (const item of items) {
+      const v = this.variantRowById(item.variantId);
+      if (!v) throw notFound("variant", item.variantId);
+      const avail = this.toAvailability(v);
+      const sellable = avail.status === "in_stock" || avail.status === "limited";
+      const have = sellable && avail.quantity !== undefined ? avail.quantity : 0;
+      if (!sellable || have < item.quantity) {
+        throw invalidArgument(
+          `variant "${item.variantId}" is no longer available (needs ${item.quantity}, have ${have ?? "none"})`,
+          { variantId: item.variantId, requested: item.quantity, available: have ?? 0 },
+        );
+      }
+    }
+    for (const item of items) {
+      this.decrementStock(item.variantId, item.quantity);
+    }
+
+    const order: Order = {
+      id: `ord_${randomUUID()}`,
+      checkoutId: id,
+      currency: checkout.currency,
+      status: "confirmed",
+      ...(checkout.totals?.total ? { total: checkout.totals.total } : {}),
+      createdAt: this.now(),
+    };
+    checkout.status = "completed";
+    checkout.orderId = order.id;
+    checkout.updatedAt = this.now();
+    if (cartRecord) {
+      cartRecord.cart.status = "converted";
+      cartRecord.cart.updatedAt = this.now();
+    }
+    this.orderStore.set(order.id, order);
+    return order;
+  }
+
+  async cancelCheckout(id: string, options?: TransactionMeta): Promise<Checkout> {
+    await this.throttle();
+    const record = this.requireCheckoutRecord(id);
+    if (record.checkout.status === "completed") {
+      throw invalidArgument(`checkout "${id}" is already completed and cannot be cancelled`);
+    }
+    record.checkout.status = "cancelled";
+    record.checkout.updatedAt = this.now();
+    return record.checkout;
   }
 }
 
