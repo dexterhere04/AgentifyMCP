@@ -23,6 +23,9 @@ importers:
       '@gateway/metadata':
         specifier: workspace:*
         version: link:packages/metadata
+      '@gateway/ucp':
+        specifier: workspace:*
+        version: link:packages/ucp
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.17(hono@4.13.5)
@@ -56,6 +59,9 @@ importers:
       '@gateway/metadata':
         specifier: workspace:*
         version: link:../../packages/metadata
+      '@gateway/ucp':
+        specifier: workspace:*
+        version: link:../../packages/ucp
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.17(hono@4.13.5)
@@ -92,6 +98,15 @@ importers:
       '@gateway/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
+
+  packages/ucp:
+    dependencies:
+      '@gateway/canonical-commerce':
+        specifier: workspace:*
+        version: link:../canonical-commerce
+      zod:
+        specifier: ^4.5.4
+        version: 4.5.4
 
 packages:
 

@@ -16,6 +16,7 @@
     "@gateway/canonical-commerce": "workspace:*",
     "@gateway/mcp": "workspace:*",
     "@gateway/metadata": "workspace:*",
+    "@gateway/ucp": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "hono": "^4.13.5"
   }
