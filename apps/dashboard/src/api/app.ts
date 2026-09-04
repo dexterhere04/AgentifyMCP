@@ -9,18 +9,24 @@ import {
   validateRestConfig,
   type RestAdapterConfig,
 } from "@agentify/adapter-rest";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import { SqliteAuditStore } from "@agentify/audit";
-import { detectCapabilities, isProviderError } from "@agentify/canonical-commerce";
-import { MerchantStore } from "./store.js";
+import { detectCapabilities, enabledCapabilities, isProviderError } from "@agentify/canonical-commerce";
+import { AgentConfigStore, defaultAgentConfig, MerchantStore, type AgentConfig } from "./store.js";
 import { GatewayManager } from "./gateway-manager.js";
+import { DemoStoreManager } from "./demo-store-manager.js";
+import { buildLandscape } from "./landscape.js";
 
 export interface DashboardOptions {
   repoRoot: string;
   dataDir: string;
   auditDbPath?: string;
+  agentsDir?: string;
 }
 
 const SCHEMA_REL = join("packages", "adapter-rest", "schemas", "merchant-config.schema.json");
+const DEMO_CONFIG_REL = join("testing", "basic-store", "merchant.config.json");
+const DEMO_ID = "common-goods-rest";
 
 function blankConfig(id: string, name: string): RestAdapterConfig {
   return {
@@ -104,10 +110,79 @@ async function runSmoke(config: RestAdapterConfig, useFixture: boolean) {
   }
 }
 
+const CAP_TOOLS: Record<string, string[]> = {
+  catalog: ["search_catalog", "get_product", "get_variant"],
+  inventory: ["check_availability"],
+  pricing: ["get_offer"],
+  cart: ["create_cart", "get_cart", "add_to_cart", "update_cart_item", "remove_from_cart"],
+  checkout: ["create_checkout", "get_checkout", "complete_checkout", "cancel_checkout"],
+  orders: ["get_order"],
+  recommendations: ["get_recommendations"],
+};
+
+function toolsForCaps(caps: import("@agentify/canonical-commerce").Capabilities): string[] {
+  return enabledCapabilities(caps).flatMap((k) => CAP_TOOLS[k] ?? []).concat("get_audit_trail");
+}
+
+function buildAgentKit(config: RestAdapterConfig, agent: AgentConfig, base: string) {
+  const b = base.replace(/\/+$/, "");
+  const caps = detectCapabilities(new RestCommerceProvider(config));
+  const tools = toolsForCaps(caps);
+  const mcpUrl = `${b}/mcp`;
+  const ucpUrl = `${b}/.well-known/ucp`;
+  const agentsMdUrl = `${b}/agents.md`;
+  const llmsTxtUrl = `${b}/llms.txt`;
+  const instructions = [
+    `# ${agent.agentName} — instructions for ${config.merchant.name}`,
+    agent.greeting ? `Greeting: ${agent.greeting}` : null,
+    `Persona: ${agent.persona}`,
+    agent.instructions,
+    `Checkout: ${agent.checkout.mode === "in_app" ? "in-app (embedded Razorpay Checkout)" : "payment link handoff"} — completion always requires explicit buyer approval.`,
+    agent.recommendations.enabled
+      ? `Suggestions: recommend upsells/cross-sells for the cart (max ${agent.recommendations.maxSuggestions}, budget guard ${agent.recommendations.budgetGuard ? "on" : "off"}) — use get_recommendations.`
+      : "Suggestions: do not upsell or cross-sell.",
+    "Verify availability + live offer before recommending anything.",
+    `MCP endpoint: ${mcpUrl}`,
+  ]
+    .filter((l): l is string => !!l)
+    .join("\n");
+  const mcpServersJson = JSON.stringify(
+    { mcpServers: { [config.id]: { url: mcpUrl } } },
+    null,
+    2,
+  );
+  const checkoutSnippet = agent.checkout.mode === "in_app"
+    ? [
+        "// Conversational in-app checkout (Razorpay Checkout.js).",
+        "// When the agent creates a checkout it returns a checkoutId; ask it to start the",
+        "// embedded payment, then open the returned orderId in the Razorpay Checkout modal.",
+        "const options = {",
+        '  key: "YOUR_RAZORPAY_KEY_ID",   // public key id (test: rzp_test_...)',
+        "  order_id: orderId,             // returned by the gateway",
+        "  handler: async (res) => {",
+        '    await fetch(`${BASE}/payments/verify`, { method: "POST", headers: { "content-type": "application/json" },',
+        "      body: JSON.stringify({ orderId: res.razorpay_order_id, paymentId: res.razorpay_payment_id, signature: res.razorpay_signature }) });",
+        "    // order is now complete — the agent can read it via get_order",
+        "  },",
+        "};",
+        "const rzp = new Razorpay(options); rzp.open();",
+      ].join("\n")
+    : "// Link mode: hand the buyer the paymentUrl from complete_checkout.";
+  return {
+    merchantId: config.id,
+    agent: agent,
+    baseUrl: b,
+    endpoints: { mcp: mcpUrl, ucp: ucpUrl, agentsMd: agentsMdUrl, llmsTxt: llmsTxtUrl },
+    tools,
+    instructions,
+    mcpServersJson,
+    checkoutSnippet,
+  };
+}
+
 function flattenLeaves(value: unknown, prefix = ""): Array<{ path: string; sample: string }> {
   const out: Array<{ path: string; sample: string }> = [];
-  if (value === null || value === undefined) return out;
-  if (Array.isArray(value)) {
+  if (value === null || value === undefined) return out;  if (Array.isArray(value)) {
     if (value.length) flattenLeaves(value[0], prefix);
     return out;
   }
@@ -123,7 +198,9 @@ function flattenLeaves(value: unknown, prefix = ""): Array<{ path: string; sampl
 
 export function createDashboardApp(opts: DashboardOptions): Hono {
   const store = new MerchantStore(opts.dataDir);
+  const agents = new AgentConfigStore(opts.agentsDir ?? join(opts.dataDir, "..", "agents"));
   const manager = new GatewayManager(opts.repoRoot);
+  const demoStore = new DemoStoreManager(opts.repoRoot);
   const schema = readFileSync(join(opts.repoRoot, SCHEMA_REL), "utf8");
   const auditPath = opts.auditDbPath ?? join(opts.dataDir, "audit.db");
   const audit = new SqliteAuditStore(auditPath);
@@ -152,6 +229,81 @@ export function createDashboardApp(opts: DashboardOptions): Hono {
       return c.json({ ok: true });
     } catch {
       return c.json({ error: "not_found" }, 404);
+    }
+  });
+
+  // ---- agent playground ----------------------------------------------------
+  app.get("/api/merchants/:id/agent", (c) => {
+    try {
+      return c.json(agents.get(c.req.param("id")));
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+  app.put("/api/merchants/:id/agent", async (c) => {
+    const raw = (await c.req.json()) as Partial<AgentConfig>;
+    const config = { ...defaultAgentConfig(), ...raw };
+    if (!config.agentName) return c.json({ error: "agentName is required" }, 400);
+    agents.save(c.req.param("id"), config);
+    return c.json({ ok: true, config });
+  });
+  app.get("/api/merchants/:id/agent/tools", async (c) => {
+    try {
+      const config = store.get(c.req.param("id"));
+      const provider = new RestCommerceProvider(config);
+      const caps = detectCapabilities(provider);
+      return c.json({ capabilities: enabledCapabilities(caps), tools: toolsForCaps(caps) });
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : "not_found" }, 404);
+    }
+  });
+  app.get("/api/merchants/:id/agent/kit", (c) => {
+    try {
+      const config = store.get(c.req.param("id"));
+      let agent: AgentConfig;
+      try {
+        agent = agents.get(c.req.param("id"));
+      } catch {
+        agent = defaultAgentConfig();
+      }
+      const base = (manager.getStatus().running && manager.getStatus().baseUrl) || config.http.baseUrl;
+      return c.json(buildAgentKit(config, agent, base));
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+  app.post("/api/merchants/upsell/preview", async (c) => {
+    const body = (await c.req.json()) as { budgetMinor?: number };
+    const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });
+    const cart = await provider.cart!.create();
+    await provider.cart!.addItem({ cartId: cart.id, variantId: "neck-anniversary-18", quantity: 1 });
+    const items = await provider.recommendations!.get({
+      cartId: cart.id,
+      ...(body?.budgetMinor ? { budgetMinor: body.budgetMinor } : {}),
+    });
+    provider.close();
+    return c.json({ items });
+  });
+
+  app.get("/api/merchants/:id/landscape", async (c) => {
+    const id = c.req.param("id");
+    let config: RestAdapterConfig;
+    try {
+      config = store.get(id);
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const status = manager.getStatus();
+    const live = status.running === true && status.kind === "rest" && status.merchantId === id;
+    const baseUrl = (live && status.baseUrl) || status.baseUrl || "http://localhost:8787";
+    try {
+      const landscape = await buildLandscape(config, baseUrl);
+      return c.json({ ...landscape, live, running: status.running });
+    } catch (err) {
+      return c.json(
+        { error: "cannot build agent landscape for this config", reason: err instanceof Error ? err.message : String(err) },
+        400,
+      );
     }
   });
 
@@ -241,6 +393,64 @@ export function createDashboardApp(opts: DashboardOptions): Hono {
     } catch {
       return c.json({ running: false, error: "could not reach gateway" });
     }
+  });
+
+  // demo REST store (testing/basic-store backend)
+  app.get("/api/demo-rest/status", (c) => {
+    let installed = false;
+    try {
+      store.get(DEMO_ID);
+      installed = true;
+    } catch {
+      /* not installed yet */
+    }
+    return c.json({ id: DEMO_ID, installed, store: demoStore.getStatus(), gateway: manager.getStatus() });
+  });
+
+  app.post("/api/demo-rest/boot", async (c) => {
+    let config: RestAdapterConfig;
+    try {
+      config = store.get(DEMO_ID);
+    } catch {
+      config = JSON.parse(readFileSync(join(opts.repoRoot, DEMO_CONFIG_REL), "utf8")) as RestAdapterConfig;
+      store.save(config.id, config);
+    }
+    const current = manager.getStatus();
+    if (current.running) {
+      return c.json({ error: `a gateway is already running (${current.kind}); stop it first` }, 409);
+    }
+    try {
+      demoStore.start();
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
+    }
+    try {
+      const gateway = manager.start({
+        kind: "rest",
+        merchantId: DEMO_ID,
+        configPath: store.filePath(DEMO_ID),
+      });
+      return c.json({
+        ok: true,
+        merchant: {
+          id: DEMO_ID,
+          name: config.merchant.name,
+          currency: config.merchant.defaultCurrency,
+          baseUrl: config.http.baseUrl,
+        },
+        store: demoStore.getStatus(),
+        gateway,
+      });
+    } catch (err) {
+      demoStore.stop();
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 409);
+    }
+  });
+
+  app.post("/api/demo-rest/stop", (c) => {
+    const gateway = manager.stop();
+    const storeStatus = demoStore.stop();
+    return c.json({ ok: true, gateway, store: storeStatus });
   });
 
   // audit viewer (shared SQLite file)

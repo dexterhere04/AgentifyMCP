@@ -52,6 +52,10 @@ class LocalFakeGateway implements PaymentGateway {
     const orderId = this.linkToOrder.get(linkId) ?? "";
     return this.orderStatus(orderId);
   }
+  verifyPaymentSignature(payload: { orderId: string; paymentId: string; signature: string }): boolean {
+    const expected = createHmac("sha256", SECRET).update(`${payload.orderId}|${payload.paymentId}`, "utf8").digest("hex");
+    return expected === payload.signature;
+  }
   verifyWebhookSignature(raw: string, signature: string): boolean {
     const expected = createHmac("sha256", SECRET).update(raw, "utf8").digest("hex");
     return expected === signature;
@@ -186,7 +190,6 @@ describe("PaymentOrchestrator.reconcileByPolling", () => {
     const order = await orch.reconcileByPolling(checkout.id);
     expect(order.status).toBe("confirmed");
   });
-
   it("is idempotent across polling and webhook paths", async () => {
     const { orch, gateway, checkout } = await setup();
     const intent = await orch.startPayment(checkout.id);
@@ -210,5 +213,47 @@ describe("PaymentOrchestrator.reconcileByPolling", () => {
     await expect(orch.reconcileByPolling(checkout.id)).rejects.toMatchObject({
       code: "AMOUNT_MISMATCH",
     });
+  });
+});
+
+describe("PaymentOrchestrator in-app (Checkout.js)", () => {
+  const sig = (orderId: string, paymentId: string): string =>
+    createHmac("sha256", SECRET).update(`${orderId}|${paymentId}`, "utf8").digest("hex");
+
+  it("starts an embedded session and completes on a valid callback", async () => {
+    const { orch, provider, checkout, gateway } = await setup();
+    const intent = await orch.startInAppCheckout(checkout.id);
+    expect(intent.paymentOrderId).toMatch(/^order_/);
+    expect(intent.amount.amount).toBe(399900);
+
+    const order = await orch.verifyInAppPayment({
+      orderId: intent.paymentOrderId,
+      paymentId: "pay_inapp_1",
+      signature: sig(intent.paymentOrderId, "pay_inapp_1"),
+    });
+    expect(order.status).toBe("confirmed");
+    const fetched = await provider.orders!.get(order.id);
+    expect(fetched.id).toBe(order.id);
+    void gateway;
+  });
+
+  it("is idempotent for a duplicate callback", async () => {
+    const { orch, checkout } = await setup();
+    const intent = await orch.startInAppCheckout(checkout.id);
+    const payload = { orderId: intent.paymentOrderId, paymentId: "pay_x", signature: sig(intent.paymentOrderId, "pay_x") };
+    const first = await orch.verifyInAppPayment(payload);
+    const second = await orch.verifyInAppPayment(payload);
+    expect(second.id).toBe(first.id);
+  });
+
+  it("rejects a bad signature and an unknown order", async () => {
+    const { orch, checkout } = await setup();
+    const intent = await orch.startInAppCheckout(checkout.id);
+    await expect(
+      orch.verifyInAppPayment({ orderId: intent.paymentOrderId, paymentId: "p", signature: "bad" }),
+    ).rejects.toMatchObject({ code: "INVALID_SIGNATURE" });
+    await expect(
+      orch.verifyInAppPayment({ orderId: "order_missing", paymentId: "p", signature: "x" }),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 });

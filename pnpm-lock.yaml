@@ -50,6 +50,9 @@ importers:
       '@types/node':
         specifier: ^26.0.0
         version: 26.4.1
+      hono:
+        specifier: ^4.13.5
+        version: 4.13.5
       tsx:
         specifier: ^4.19.0
         version: 4.23.13
@@ -65,6 +68,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@agentify/adapter-mock':
+        specifier: workspace:*
+        version: link:../../packages/adapter-mock
       '@agentify/adapter-rest':
         specifier: workspace:*
         version: link:../../packages/adapter-rest
@@ -74,6 +80,12 @@ importers:
       '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../../packages/canonical-commerce
+      '@agentify/metadata':
+        specifier: workspace:*
+        version: link:../../packages/metadata
+      '@agentify/ucp':
+        specifier: workspace:*
+        version: link:../../packages/ucp
       '@hono/node-server':
         specifier: ^1.14.0
         version: 1.19.17(hono@4.13.5)

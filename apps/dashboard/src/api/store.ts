@@ -15,14 +15,91 @@ export interface MerchantSummary {
   baseUrl: string;
   currency: string;
   updatedAt: string;
+  /** "draft" until the essential identity/connection/endpoint/mapping fields are set. */
+  state: "draft" | "ready";
+  /** Capability labels statically derived from the config document. */
+  tags: string[];
+}
+
+const TEMPLATE_NAME = "My Store";
+const TEMPLATE_BASE = "https://api.your-store.example";
+
+function deriveState(config: RestAdapterConfig): "draft" | "ready" {
+  const name = config.merchant.name?.trim();
+  const baseUrl = config.http?.baseUrl?.trim();
+  if (!name || name === TEMPLATE_NAME) return "draft";
+  if (!baseUrl || baseUrl === TEMPLATE_BASE) return "draft";
+  if (!config.catalog?.search?.path?.trim()) return "draft";
+  if (!config.mappings?.product?.id?.trim()) return "draft";
+  return "ready";
+}
+
+function deriveTags(config: RestAdapterConfig): string[] {
+  const tags: string[] = [];
+  const catalog = config.catalog;
+  if (catalog?.search?.path) tags.push("catalog");
+  if (catalog?.offerUrl) tags.push("offers");
+  if (catalog?.stockUrl) tags.push("stock");
+  return tags;
 }
 
 function safeId(id: string): boolean {
   return /^[a-z0-9][a-z0-9_-]{0,63}$/i.test(id);
 }
 
+export interface AgentConfig {
+  agentName: string;
+  persona: string;
+  instructions: string;
+  greeting?: string;
+  checkout: { mode: "link" | "in_app" };
+  recommendations: {
+    enabled: boolean;
+    maxSuggestions: number;
+    budgetGuard: boolean;
+    overrides: Array<{ productId: string; suggestProductId: string; note?: string }>;
+  };
+  capabilities: Record<string, boolean>;
+}
+
+export function defaultAgentConfig(): AgentConfig {
+  return {
+    agentName: "Store Assistant",
+    persona: "A helpful, honest shopping assistant for this store.",
+    instructions: "Help the buyer find items, verify the live offer, and only complete checkout with their explicit approval.",
+    greeting: "Hi — how can I help you shop today?",
+    checkout: { mode: "in_app" },
+    recommendations: { enabled: true, maxSuggestions: 3, budgetGuard: true, overrides: [] },
+    capabilities: {},
+  };
+}
+
+export class AgentConfigStore {
+  private readonly dir: string;
+
+  constructor(agentsDir: string) {
+    this.dir = agentsDir;
+    mkdirSync(this.dir, { recursive: true });
+  }
+
+  get(merchantId: string): AgentConfig {
+    const file = join(this.dir, `${merchantId}.json`);
+    if (!existsSync(file)) throw new Error("agent config not found");
+    return JSON.parse(readFileSync(file, "utf8")) as AgentConfig;
+  }
+
+  save(merchantId: string, config: AgentConfig): AgentConfig {
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(join(this.dir, `${merchantId}.json`), `${JSON.stringify(config, null, 2)}\n`);
+    return config;
+  }
+}
+
 export class MerchantStore {
-  constructor(private readonly dataDir: string) {
+  private readonly dataDir: string;
+
+  constructor(dataDir: string) {
+    this.dataDir = dataDir;
     mkdirSync(this.dataDir, { recursive: true });
   }
 
@@ -55,6 +132,8 @@ export class MerchantStore {
       baseUrl: config.http.baseUrl,
       currency: config.merchant.defaultCurrency,
       updatedAt: new Date(mtime).toISOString(),
+      state: deriveState(config),
+      tags: deriveTags(config),
     };
   }
 

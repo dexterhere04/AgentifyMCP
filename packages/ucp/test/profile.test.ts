@@ -18,6 +18,7 @@ const FULL_CAPS: Capabilities = {
   cart: true,
   checkout: true,
   orders: true,
+  recommendations: true,
 };
 
 const CATALOG_CAPS: Capabilities = {
@@ -27,6 +28,7 @@ const CATALOG_CAPS: Capabilities = {
   cart: false,
   checkout: false,
   orders: false,
+  recommendations: false,
 };
 
 function base(caps: Capabilities, extra: Record<string, unknown> = {}) {

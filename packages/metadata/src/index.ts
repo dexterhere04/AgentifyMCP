@@ -75,6 +75,9 @@ function mcpToolNames(capabilities: CapabilityName[]): string {
   if (has("orders")) {
     tools.push("get_order");
   }
+  if (has("recommendations")) {
+    tools.push("get_recommendations");
+  }
   return tools.join(", ");
 }
 
@@ -84,7 +87,7 @@ export function agentsMarkdown(ctx: MetadataContext): string {
   const mcpUrl = url(base, config.mcpPath ?? "/mcp");
   const ucpUrl = url(base, config.ucpPath ?? "/.well-known/ucp");
   const c = capabilities;
-  const supports = capabilitySummary({ catalog: true, inventory: true, pricing: true, cart: c.includes("cart"), checkout: c.includes("checkout"), orders: c.includes("orders") });
+  const supports = capabilitySummary({ catalog: true, inventory: true, pricing: true, cart: c.includes("cart"), checkout: c.includes("checkout"), orders: c.includes("orders"), recommendations: c.includes("recommendations") });
 
   const lines: string[] = [];
   lines.push(`# ${merchant.name} — Agent Instructions`);

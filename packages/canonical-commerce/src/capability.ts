@@ -16,6 +16,7 @@ export const CAPABILITY_NAMES = [
   "cart",
   "checkout",
   "orders",
+  "recommendations",
 ] as const;
 
 export type CapabilityName = (typeof CAPABILITY_NAMES)[number];
@@ -27,6 +28,7 @@ export interface Capabilities {
   cart: boolean;
   checkout: boolean;
   orders: boolean;
+  recommendations: boolean;
 }
 
 export function detectCapabilities(provider: CommerceProvider): Capabilities {
@@ -37,6 +39,7 @@ export function detectCapabilities(provider: CommerceProvider): Capabilities {
     cart: typeof provider.cart?.create === "function",
     checkout: typeof provider.checkout?.create === "function",
     orders: typeof provider.orders?.get === "function",
+    recommendations: typeof provider.recommendations?.get === "function",
   };
 }
 
@@ -53,5 +56,6 @@ export function capabilitySummary(caps: Capabilities): string[] {
   if (caps.cart) enabled.push("cart");
   if (caps.checkout) enabled.push("checkout");
   if (caps.orders) enabled.push("orders");
+  if (caps.recommendations) enabled.push("recommendations (upsell + cross-sell)");
   return enabled;
 }

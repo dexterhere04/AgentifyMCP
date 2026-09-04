@@ -143,6 +143,11 @@ const TOOLS: Record<
       "Read the explainable, bounded, approval-gated audit trail for a checkout: every cart/checkout/payment action with amounts, approval state and explanations, including any refusals (e.g. PRICE_CHANGED). Read-only.",
     enabled: () => true,
   },
+  get_recommendations: {
+    description:
+      "Suggest an upsell (a premium option of an item in the cart) and cross-sell (items that pair with the cart) — always budget-aware and in-stock, never suggesting items already in the cart.",
+    enabled: (caps) => caps.recommendations,
+  },
 };
 
 /**
@@ -391,6 +396,17 @@ export class CommerceToolRegistry {
           throw new ToolError("UNSUPPORTED_CAPABILITY", "audit trail unavailable");
         }
         return { checkoutId: a.checkoutId, events: this.options.audit.byCheckout(a.checkoutId) };
+      }
+      case "get_recommendations": {
+        const a = args as z.infer<typeof ToolArgSchemas.get_recommendations>;
+        if (!this.provider.recommendations) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "recommendations unavailable");
+        }
+        return this.provider.recommendations.get({
+          cartId: a.cartId,
+          ...(a.budgetMinor !== undefined ? { budgetMinor: a.budgetMinor } : {}),
+          ...(a.currency ? { currency: a.currency.toUpperCase() } : {}),
+        });
       }
     }
   }

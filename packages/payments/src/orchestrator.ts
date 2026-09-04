@@ -1,6 +1,7 @@
 import {
   moneyEquals,
   type CommerceProvider,
+  type InAppPaymentIntent,
   type Money,
   type Order,
   type PaymentConfirmedEvent,
@@ -51,6 +52,7 @@ interface PaymentConfirmation {
  */
 export class PaymentOrchestrator {
   private readonly intents = new Map<string, PaymentIntent>();
+  private readonly inApp = new Map<string, { checkoutId: string; amount: Money }>();
   private readonly processedPayments = new Map<string, string>(); // paymentId -> orderId
   private readonly finalizedCheckouts = new Map<string, Order>(); // checkoutId -> order
 
@@ -125,6 +127,76 @@ export class PaymentOrchestrator {
     };
     this.intents.set(checkoutId, intent);
     return intent;
+  }
+
+  /**
+   * Start an EMBEDDED (Checkout.js) payment: create the Razorpay order only (no
+   * payment link). The host app renders Checkout with this order id; on success
+   * the buyer's session posts payment_id + signature to verifyInAppPayment.
+   */
+  async startInAppCheckout(checkoutId: string, ctx: StartPaymentContext = {}): Promise<InAppPaymentIntent> {
+    if (!this.provider.checkout) {
+      throw new ProviderError("UNSUPPORTED_CAPABILITY", "merchant does not expose checkout");
+    }
+    const checkout = await this.provider.checkout.get(checkoutId);
+    if (checkout.status === "completed" || checkout.status === "cancelled") {
+      throw new PaymentError(
+        "CHECKOUT_NOT_PAYABLE",
+        `checkout "${checkoutId}" is ${checkout.status} and cannot be paid`,
+      );
+    }
+    const total = checkout.totals?.total;
+    if (!total || total.amount <= 0) {
+      throw new PaymentError("CHECKOUT_NOT_PAYABLE", `checkout "${checkoutId}" has no payable total`);
+    }
+    const order = await this.gateway.createOrder({
+      amount: total,
+      receipt: checkoutId,
+      description: `Checkout ${checkoutId}`,
+      notes: { merchant_id: this.merchantId, agent: ctx.agent ?? "" },
+    });
+    this.audit.record({
+      event: "checkout.payment.order.created",
+      merchant_id: this.merchantId,
+      checkout_id: checkoutId,
+      agent: ctx.agent,
+      amount: total.amount,
+      currency: total.currency,
+      approval: { required: true, received: false },
+      details: { payment_order_id: order.id, provider: this.gateway.id, mode: "in_app" },
+    });
+    this.inApp.set(order.id, { checkoutId, amount: total });
+    return {
+      checkoutId,
+      provider: this.gateway.id,
+      paymentOrderId: order.id,
+      amount: total,
+    };
+  }
+
+  /** Verify a Razorpay Checkout.js callback and finalize the order (idempotent). */
+  async verifyInAppPayment(input: {
+    orderId: string;
+    paymentId: string;
+    signature: string;
+  }): Promise<Order> {
+    const intent = this.inApp.get(input.orderId);
+    if (!intent) {
+      throw new PaymentError("NOT_FOUND", `no embedded payment session for order "${input.orderId}"`);
+    }
+    if (!this.gateway.verifyPaymentSignature) {
+      throw new PaymentError("UNSUPPORTED", "gateway does not support embedded payment verification");
+    }
+    if (!this.gateway.verifyPaymentSignature(input)) {
+      this.audit.record({
+        event: "checkout.payment.webhook.invalid_signature",
+        merchant_id: this.merchantId,
+        checkout_id: intent.checkoutId,
+        payment_id: input.paymentId,
+      });
+      throw new PaymentError("INVALID_SIGNATURE", "invalid Razorpay Checkout signature");
+    }
+    return this.finalize(intent.checkoutId, { paymentId: input.paymentId, amount: intent.amount });
   }
 
   /**

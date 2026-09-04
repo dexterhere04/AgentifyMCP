@@ -17,10 +17,26 @@ export function setAt<T>(obj: T, path: string, val: unknown): T {
   return clone as T;
 }
 
+export function timeAgo(iso?: string): string {
+  if (!iso) return "-";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "-";
+  const s = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (s < 45) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return new Date(then).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 /* ------- primitives ------- */
 export function Panel({ className = "", children }: { className?: string; children: ReactNode }) {
   return <div className={`panel ${className}`}>{children}</div>;
 }
+
 export function PanelBody({ title, hint, aside, children }: { title?: string; hint?: string; aside?: ReactNode; children: ReactNode }) {
   return (
     <Panel>
@@ -51,7 +67,7 @@ export function Field({ label, hint, invalid, children }: { label: string; hint?
 export function StatusPill({ running, port, baseUrl, lastError }: { running: boolean; port?: number; baseUrl?: string; lastError?: string }) {
   return (
     <span className={`badge ${running ? "on" : lastError ? "err" : "off"}`}>
-      <span className={`dot ${running ? "pulse" : ""}`} style={{ background: running ? "var(--ok)" : lastError ? "var(--danger)" : "var(--muted)" }} />
+      <span className={`dot ${running ? "pulse" : ""}`} style={{ background: running ? "var(--ok)" : lastError ? "var(--danger)" : "var(--faint)" }} />
       {running ? `live · :${port}` : lastError ? "errored" : "stopped"}
     </span>
   );
@@ -92,10 +108,10 @@ export function Skeleton({ lines = 3 }: { lines?: number }) {
 export function Empty({ icon, title, body, action }: { icon?: ReactNode; title: string; body?: string; action?: ReactNode }) {
   return (
     <div className="empty">
-      {icon && <div style={{ marginBottom: 10, color: "var(--accent)" }}>{icon}</div>}
-      <div style={{ fontFamily: "var(--display)", fontSize: 17 }}>{title}</div>
-      {body && <p style={{ margin: "8px auto", maxWidth: 460 }}>{body}</p>}
-      {action && <div style={{ marginTop: 14 }}>{action}</div>}
+      {icon && <div className="glyph">{icon}</div>}
+      <h3>{title}</h3>
+      {body && <p style={{ margin: "6px auto 0", maxWidth: 440, fontSize: 13.5 }}>{body}</p>}
+      {action && <div style={{ marginTop: 20 }}>{action}</div>}
     </div>
   );
 }
@@ -105,4 +121,13 @@ export function Err({ children }: { children: ReactNode }) {
 }
 export function Ok({ children }: { children: ReactNode }) {
   return <div className="okbox">{children}</div>;
+}
+
+export function Spinner({ size = 14 }: { size?: number }) {
+  return (
+    <svg className="spin" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="2.5" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
 }

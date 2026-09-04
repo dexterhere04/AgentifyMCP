@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type IconProps = { size?: number; className?: string };
 
 const S = ({ size = 16, className, children }: IconProps & { children: ReactNode }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
     {children}
   </svg>
 );
@@ -30,3 +30,10 @@ export const IconRun = (p: IconProps) => <S {...p}><circle cx="6" cy="6" r="3" /
 export const IconTarget = (p: IconProps) => <S {...p}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></S>;
 export const IconWarn = (p: IconProps) => <S {...p}><path d="M12 3 2 21h20L12 3z" /><path d="M12 9v5" /><path d="M12 17.5h.01" /></S>;
 export const IconChecks = (p: IconProps) => <S {...p}><path d="M3 12l4 4L15 7" /><path d="M10 12l4 4L20 7" /></S>;
+export const IconArrowRight = (p: IconProps) => <S {...p}><path d="M5 12h14M13 6l6 6-6 6" /></S>;
+export const IconArrowLeft = (p: IconProps) => <S {...p}><path d="M19 12H5M11 6l-6 6 6 6" /></S>;
+export const IconExternal = (p: IconProps) => <S {...p}><path d="M14 4h6v6M20 4l-9 9" /><path d="M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5" /></S>;
+export const IconClock = (p: IconProps) => <S {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></S>;
+export const IconSearch = (p: IconProps) => <S {...p}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></S>;
+export const IconStore = (p: IconProps) => <S {...p}><path d="M4 10v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9" /><path d="M3 5h18l-2 5H5L3 5z" /><path d="M9 20v-5h6v5" /></S>;
+export const IconKey = (p: IconProps) => <S {...p}><circle cx="8" cy="15" r="4" /><path d="M11 12 20 3M15 8l3 3" /></S>;

@@ -1,0 +1,68 @@
+{
+  "id": "common-goods-rest",
+  "merchant": {
+    "name": "Common Goods Co.",
+    "description": "Basic ecommerce store served by the /testing REST backend. Fully configured end-to-end through the config-driven adapter — no merchant code.",
+    "url": "https://www.common-goods.example",
+    "country": "IN",
+    "defaultCurrency": "INR"
+  },
+  "http": {
+    "baseUrl": "http://localhost:8799",
+    "timeoutMs": 3000
+  },
+  "catalog": {
+    "search": {
+      "path": "/products",
+      "query": {
+        "q": "{query}",
+        "category": "{category}",
+        "page": "{page}",
+        "limit": "{limit}"
+      },
+      "itemsPath": "$.data",
+      "totalPath": "$.total",
+      "pageSize": 12
+    },
+    "productUrl": "/products/{productId}",
+    "variantUrl": "/variants/{variantId}",
+    "offerUrl": "/offers?variant_id={variantId}",
+    "stockUrl": "/variants/{variantId}/stock"
+  },
+  "mappings": {
+    "product": {
+      "id": "$.id",
+      "title": "$.title",
+      "description": "$.description",
+      "category": "$.category",
+      "brand": "$.brand",
+      "images": "$.images",
+      "variants": {
+        "path": "$.variants",
+        "each": {
+          "id": "$.id",
+          "sku": "$.sku",
+          "title": "$.name",
+          "attributes": {
+            "color": "$.color",
+            "size": "$.size",
+            "scent": "$.scent"
+          },
+          "listPrice": { "path": "$.price", "unit": "major" },
+          "salePrice": { "path": "$.sale_price", "unit": "major" },
+          "availability": { "path": "$.stock" }
+        }
+      }
+    },
+    "offer": {
+      "id": "$.id",
+      "productId": "$.product_id",
+      "sku": "$.sku",
+      "title": "$.name",
+      "productTitle": "$.product_title",
+      "listPrice": { "path": "$.price", "unit": "major" },
+      "salePrice": { "path": "$.sale_price", "unit": "major" },
+      "availability": { "path": "$.stock" }
+    }
+  }
+}

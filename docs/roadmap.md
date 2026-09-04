@@ -17,7 +17,8 @@ Status of the architecture doc's MVP plan.
 | 5 | Catalog index + semantic search | 🔜 |
 | 6 | Full checkout fidelity (shipping/coupon, state machine polish) | 🔜 |
 | 8 | Local integration dashboard (config · test · run · audit) | ✅ local / 🔜 hosted multi-tenant |
-| 9 | Revenue intelligence (upsell/cross-sell) | 🔜 |
+| — | In-app checkout (Razorpay Checkout.js) — order + `POST /payments/verify` | ✅ |
+| 9 | Revenue intelligence (upsell/cross-sell) | 🔜 engine + playground config landed |
 
 ## Distribution (this effort)
 

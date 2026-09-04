@@ -78,6 +78,23 @@ export interface PaymentGateway {
    * gateway created independently.
    */
   getPaymentLinkStatus?(linkId: string): Promise<PaymentOrderStatus>;
+  /**
+   * Optional: verify a Razorpay Checkout.js callback signature
+   * (signature over `${orderId}|${paymentId}` with the merchant key secret).
+   */
+  verifyPaymentSignature?(payload: {
+    orderId: string;
+    paymentId: string;
+    signature: string;
+  }): boolean;
+}
+
+/** An embedded (Checkout.js) payment session — no payment link/redirect. */
+export interface InAppPaymentIntent {
+  checkoutId: string;
+  provider: string;
+  paymentOrderId: string;
+  amount: Money;
 }
 
 /** Result of starting the payment flow for a checkout. */

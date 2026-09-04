@@ -174,6 +174,21 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
         return paymentWebhookError(c, err);
       }
     });
+
+    // Embedded (Checkout.js) payment confirmation.
+    app.post("/payments/verify", async (c) => {
+      try {
+        const body = (await c.req.json()) as { orderId: string; paymentId: string; signature: string };
+        const order = await payments.verifyInAppPayment({
+          orderId: body.orderId,
+          paymentId: body.paymentId,
+          signature: body.signature ?? "",
+        });
+        return c.json({ ok: true, order });
+      } catch (err) {
+        return paymentWebhookError(c, err);
+      }
+    });
   }
 
   // Audit trail (explainable, bounded, gated) — read-only.

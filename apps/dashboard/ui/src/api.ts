@@ -23,7 +23,47 @@ export const apiJson = {
   gatewayStop: () => api<GatewayStatus>("/gateway/stop", { method: "POST" }),
   readiness: () => api<Readiness>("/gateway/readiness"),
   audit: (params: string) => api<AuditRow[]>(`/audit?${params}`),
+  demoRestStatus: () => api<DemoRestStatus>("/demo-rest/status"),
+  demoRestBoot: () => api<DemoRestBootResult>("/demo-rest/boot", { method: "POST" }),
+  demoRestStop: () => api<{ ok: boolean }>("/demo-rest/stop", { method: "POST" }),
+  merchantLandscape: (id: string) => api<MerchantLandscape>(`/merchants/${id}/landscape`),
+  agentConfig: (id: string) => api<AgentConfig>(`/merchants/${id}/agent`),
+  saveAgentConfig: (id: string, cfg: AgentConfig) => api<{ ok: boolean; config: AgentConfig }>(`/merchants/${id}/agent`, { method: "PUT", body: JSON.stringify(cfg) }),
+  agentTools: (id: string) => api<{ capabilities: string[]; tools: string[] }>(`/merchants/${id}/agent/tools`),
+  agentKit: (id: string) => api<AgentKit>(`/merchants/${id}/agent/kit`),
+  upsellPreview: (budgetMinor?: number) => api<{ items: RecommendationItem[] }>("/merchants/upsell/preview", { method: "POST", body: JSON.stringify({ budgetMinor }) }),
 };
+
+export interface AgentConfig {
+  agentName: string;
+  persona: string;
+  instructions: string;
+  greeting?: string;
+  checkout: { mode: "link" | "in_app" };
+  recommendations: { enabled: boolean; maxSuggestions: number; budgetGuard: boolean; overrides: Array<{ productId: string; suggestProductId: string; note?: string }> };
+  capabilities: Record<string, boolean>;
+}
+
+export interface AgentKit {
+  merchantId: string;
+  agent: AgentConfig;
+  baseUrl: string;
+  endpoints: { mcp: string; ucp: string; agentsMd: string; llmsTxt: string };
+  tools: string[];
+  instructions: string;
+  mcpServersJson: string;
+  checkoutSnippet: string;
+}
+
+export interface RecommendationItem {
+  productId: string;
+  variantId: string;
+  title: string;
+  kind: "upsell" | "cross-sell";
+  reason: string;
+  price: { amount: number; currency: string };
+  inStock: boolean;
+}
 
 export interface MerchantSummary {
   id: string;
@@ -32,6 +72,8 @@ export interface MerchantSummary {
   baseUrl: string;
   currency: string;
   updatedAt: string;
+  state?: "draft" | "ready";
+  tags?: string[];
 }
 
 export interface GatewayStatus {
@@ -41,6 +83,7 @@ export interface GatewayStatus {
   pid?: number;
   baseUrl?: string;
   lastError?: string;
+  merchantId?: string;
 }
 
 export interface StartReq {
@@ -56,6 +99,51 @@ export interface Readiness {
   capabilities?: Array<{ id: string; label: string; on: boolean }>;
   payment?: boolean;
   error?: string;
+}
+
+export interface DemoRestStatus {
+  id?: string;
+  installed: boolean;
+  store: { running: boolean; port: number; lastError?: string };
+  gateway?: GatewayStatus;
+}
+
+export interface DemoRestBootResult {
+  ok: boolean;
+  merchant?: { id: string; name: string; currency: string; baseUrl: string };
+  store?: { running: boolean; port: number };
+  gateway?: GatewayStatus;
+  error?: string;
+}
+
+export interface LandscapeCapability {
+  key: string;
+  label: string;
+  what: string;
+}
+
+export interface MerchantLandscape {
+  id: string;
+  name: string;
+  description?: string;
+  url?: string;
+  country?: string;
+  defaultCurrency: string;
+  baseUrl: string;
+  live: boolean;
+  running: boolean;
+  endpoints: {
+    ucp: string;
+    mcp: string;
+    agentsMd: string;
+    llmsTxt: string;
+    skillUrl: string;
+  };
+  capabilities: LandscapeCapability[];
+  notes: string[];
+  agents: string;
+  llms: string;
+  ucpProfile: Record<string, unknown>;
 }
 
 export interface AuditRow {

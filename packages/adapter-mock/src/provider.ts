@@ -24,6 +24,8 @@ import {
   type Order,
   type Product,
   type ProductSummary,
+  type RecommendationInput,
+  type RecommendationItem,
   type TransactionMeta,
   type Variant,
   malformedRecord,
@@ -129,6 +131,7 @@ export class MockCommerceProvider implements CommerceProvider {
   cart: CommerceProvider["cart"];
   checkout: CommerceProvider["checkout"];
   orders: CommerceProvider["orders"];
+  recommendations: CommerceProvider["recommendations"];
 
   private readonly cartRecords = new Map<string, CartRecord>();
   private readonly checkoutRecords = new Map<string, CheckoutRecord>();
@@ -169,6 +172,9 @@ export class MockCommerceProvider implements CommerceProvider {
     };
     this.orders = {
       get: (id) => this.getOrder(id),
+    };
+    this.recommendations = {
+      get: (input) => this.getRecommendations(input),
     };
   }
 
@@ -903,6 +909,83 @@ export class MockCommerceProvider implements CommerceProvider {
     return order;
   }
 
+  // -------------------------------------------------------------------------
+  // CommerceProvider: recommendations (upsell + cross-sell)
+  // -------------------------------------------------------------------------
+
+  async getRecommendations(input: RecommendationInput): Promise<RecommendationItem[]> {
+    await this.throttle();
+    const record = this.cartRecords.get(input.cartId);
+    if (!record) throw notFound("cart", input.cartId);
+    const cartLines = record.cart.items;
+    if (cartLines.length === 0) return [];
+
+    const budget = input.budgetMinor ?? Number.MAX_SAFE_INTEGER;
+    const currency = input.currency ?? record.cart.currency;
+    const out: RecommendationItem[] = [];
+    const seen = new Set<string>();
+    const rows = this.productRows().filter((r) => r.malformed === 0);
+    const productRow = new Map(rows.map((r) => [r.id, r]));
+
+    const push = (item: RecommendationItem): void => {
+      if (item.price.amount > budget || item.price.currency !== currency) return;
+      const key = `${item.kind}:${item.variantId}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(item);
+    };
+
+    // upsell — a premium (higher-priced) variant of an item already in the cart
+    for (const line of cartLines) {
+      const v = this.variantRowById(line.variantId);
+      if (!v) continue;
+      const own = this.offerForVariant(v).price.amount;
+      for (const cand of this.variantRows(v.product_id)) {
+        if (seen.has(`upsell:${cand.id}`)) continue;
+        const offer = this.offerForVariant(cand);
+        if (offer.availability.status !== "in_stock" && offer.availability.status !== "limited") continue;
+        if (offer.price.amount <= own) continue;
+        push({
+          productId: cand.product_id,
+          variantId: cand.id,
+          title: this.productTitle(cand.product_id),
+          kind: "upsell",
+          reason: `Premium option for "${line.title}" already in your cart`,
+          price: offer.price,
+          inStock: true,
+        });
+      }
+    }
+
+    // cross-sell — in-stock products that share a category/material/occasion
+    const cartRows = cartLines
+      .map((l) => productRow.get(l.productId))
+      .filter((r): r is ProductRow => !!r);
+    for (const row of rows) {
+      if (cartLines.some((l) => l.productId === row.id)) continue;
+      const match = cartRows.find((c) => shareReason(c, row));
+      if (!match) continue;
+      const product = this.buildProduct(row);
+      const candidate = product.variants.find(
+        (x) => x.availability.status === "in_stock" || x.availability.status === "limited",
+      );
+      if (!candidate) continue;
+      const offer = this.offerForVariant(this.variantRowById(candidate.id)!);
+      push({
+        productId: row.id,
+        variantId: candidate.id,
+        title: product.title,
+        kind: "cross-sell",
+        reason: `Pairs with "${this.productTitle(match.id)}" (${shareLabel(match, row)})`,
+        price: offer.price,
+        inStock: true,
+      });
+      if (out.length >= 6) break;
+    }
+
+    return out.slice(0, 6);
+  }
+
   /**
    * Test/demo hook: simulate the merchant changing a variant's live sale price
    * (PriceLock exercises the "price changed after selection" failure path).
@@ -975,6 +1058,22 @@ function comparatorFor(
 
 function stockRank(s: ProductSummary): number {
   return s.inStock ? 0 : 1;
+}
+
+function shareReason(a: ProductRow, b: ProductRow): boolean {
+  if (a.category && b.category && a.category === b.category) return true;
+  if (a.material && b.material && a.material === b.material) return true;
+  if (a.brand && b.brand && a.brand === b.brand) return true;
+  const aOcc = JSON.parse(a.occasions_json) as string[];
+  const bOcc = JSON.parse(b.occasions_json) as string[];
+  return aOcc.some((o) => bOcc.includes(o));
+}
+
+function shareLabel(a: ProductRow, b: ProductRow): string {
+  if (a.category && a.category === b.category) return `same category · ${a.category}`;
+  if (a.material && a.material === b.material) return `same material · ${a.material}`;
+  if (a.brand && a.brand === b.brand) return `same brand · ${a.brand}`;
+  return "recommended with this item";
 }
 
 function discountDepth(s: ProductSummary): number {

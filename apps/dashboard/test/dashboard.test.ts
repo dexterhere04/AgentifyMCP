@@ -41,6 +41,7 @@ beforeEach(() => {
     repoRoot: REPO,
     dataDir: join(dir, "merchants"),
     auditDbPath: join(dir, "audit.db"),
+    agentsDir: join(dir, "agents"),
   });
 });
 
@@ -142,4 +143,48 @@ describe("dashboard API — gateway child manager", () => {
     const status = (await (await app.request("/api/gateway/status")).json()) as { running: boolean };
     expect(status.running).toBe(false);
   }, 60000);
+});
+
+describe("dashboard API — agent playground", () => {
+  async function seedMerchant(): Promise<string> {
+    const blank = (await (await app.request("/api/templates/blank")).json()) as { id: string };
+    await app.request(`/api/merchants/${blank.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(blank) });
+    return blank.id;
+  }
+
+  it("saves and reloads an agent config", async () => {
+    const id = await seedMerchant();
+    const cfg = {
+      agentName: "Luna Shopper",
+      persona: "helpful",
+      instructions: "verify offers",
+      checkout: { mode: "in_app" },
+      recommendations: { enabled: true, maxSuggestions: 2, budgetGuard: true, overrides: [] },
+      capabilities: {},
+    };
+    const put = await app.request(`/api/merchants/${id}/agent`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(cfg) });
+    expect(put.status).toBe(200);
+    const got = (await (await app.request(`/api/merchants/${id}/agent`)).json()) as { agentName: string };
+    expect(got.agentName).toBe("Luna Shopper");
+  });
+
+  it("returns a tools manifest and a connection kit", async () => {
+    const id = await seedMerchant();
+    const tools = (await (await app.request(`/api/merchants/${id}/agent/tools`)).json()) as { tools: string[] };
+    expect(tools.tools).toContain("search_catalog");
+    const kit = (await (await app.request(`/api/merchants/${id}/agent/kit`)).json()) as {
+      endpoints: { mcp: string };
+      mcpServersJson: string;
+      tools: string[];
+    };
+    expect(kit.endpoints.mcp).toContain("/mcp");
+    expect(kit.mcpServersJson).toContain("/mcp");
+    expect(kit.tools.length).toBeGreaterThan(0);
+  });
+
+  it("runs the upsell/cross-sell demo preview", async () => {
+    const res = await app.request("/api/merchants/upsell/preview", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const body = (await res.json()) as { items: Array<{ kind: string }> };
+    expect(body.items.some((i) => i.kind === "upsell")).toBe(true);
+  });
 });

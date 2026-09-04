@@ -186,6 +186,20 @@ export const GetAuditTrailArgs = z
   })
   .strict();
 
+export const GetRecommendationsArgs = z
+  .object({
+    cartId: z.string().describe("Active cart id to recommend against."),
+    budgetMinor: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Hard budget ceiling in minor units; suggestions never exceed it.")
+      .optional(),
+    currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+    meta: AgentMetaOptional,
+  })
+  .strict();
+
 export const ToolArgSchemas = {
   search_catalog: SearchCatalogArgs,
   get_product: GetProductArgs,
@@ -203,6 +217,7 @@ export const ToolArgSchemas = {
   cancel_checkout: CancelCheckoutArgs,
   get_order: GetOrderArgs,
   get_audit_trail: GetAuditTrailArgs,
+  get_recommendations: GetRecommendationsArgs,
 } as const;
 
 export type ToolName = keyof typeof ToolArgSchemas;

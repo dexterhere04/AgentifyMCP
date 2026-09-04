@@ -21,6 +21,7 @@ const EXPECTED_FULL_LIST = [
   "complete_checkout",
   "cancel_checkout",
   "get_order",
+  "get_recommendations",
 ];
 
 describe("CommerceToolRegistry", () => {

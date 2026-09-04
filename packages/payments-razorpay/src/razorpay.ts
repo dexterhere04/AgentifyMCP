@@ -104,6 +104,14 @@ export class RazorpayGateway implements PaymentGateway {
     };
   }
 
+  /** Verify a Razorpay Checkout.js callback: signature over `${orderId}|${paymentId}` with key_secret. */
+  verifyPaymentSignature(payload: { orderId: string; paymentId: string; signature: string }): boolean {
+    const expected = createHmac("sha256", this.config.keySecret)
+      .update(`${payload.orderId}|${payload.paymentId}`, "utf8")
+      .digest("hex");
+    return safeEqual(expected, payload.signature);
+  }
+
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null {
     const p = payload as RazorpayWebhookPayload;
     const event = p?.event;
@@ -162,4 +170,11 @@ export function razorpayGatewayFromEnv(env: NodeJS.ProcessEnv = process.env): Ra
   const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET ?? "";
   const mode = (env.RAZORPAY_MODE ?? "test") as RazorpayConfig["mode"];
   return new RazorpayGateway({ keyId, keySecret, webhookSecret, mode });
+}
+
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }

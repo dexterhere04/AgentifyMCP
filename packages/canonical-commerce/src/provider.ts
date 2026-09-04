@@ -198,6 +198,30 @@ export interface CommerceProvider {
   orders?: {
     get(id: string): Promise<Order>;
   };
+
+  /** Optional: budget-aware upsell/cross-sell suggestions for a cart. */
+  recommendations?: {
+    get(input: RecommendationInput): Promise<RecommendationItem[]>;
+  };
+}
+
+export interface RecommendationItem {
+  productId: string;
+  variantId: string;
+  title: string;
+  kind: "upsell" | "cross-sell";
+  /** Why the agent may suggest it (e.g. "higher spec of an item in your cart"). */
+  reason: string;
+  price: Money;
+  listPrice?: Money;
+  inStock: boolean;
+}
+
+export interface RecommendationInput {
+  cartId: string;
+  /** Hard budget ceiling in minor units — suggestions never exceed it. */
+  budgetMinor?: number;
+  currency?: string;
 }
 
 export type ResolvedProvider = {

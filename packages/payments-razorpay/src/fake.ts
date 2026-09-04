@@ -70,6 +70,11 @@ export class FakeRazorpayGateway implements PaymentGateway {
     return safeEqual(expected, signature);
   }
 
+  verifyPaymentSignature(payload: { orderId: string; paymentId: string; signature: string }): boolean {
+    const expected = razorpaySignature(`${payload.orderId}|${payload.paymentId}`, this.webhookSecret);
+    return safeEqual(expected, payload.signature);
+  }
+
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null {
     const event = (payload as { event?: string })?.event;
     if (event !== "payment_link.paid" && event !== "payment_link.cancelled" && event !== "payment_link.expired") {

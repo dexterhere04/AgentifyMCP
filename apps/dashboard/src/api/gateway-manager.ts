@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 export interface GatewayStartRequest {
   /** "mock" boots the built-in demo merchant; "rest" uses a merchant config file. */
   kind: "mock" | "rest";
   /** Absolute/relative path to a merchant config (required for kind "rest"). */
   configPath?: string;
+  /** Merchant id for kind "rest" (derived from configPath when omitted). */
+  merchantId?: string;
   port?: number;
   baseUrl?: string;
   razorpay?: { keyId?: string; keySecret?: string; webhookSecret?: string };
@@ -20,6 +22,8 @@ export interface GatewayStatus {
   startedAt?: string;
   baseUrl?: string;
   lastError?: string;
+  /** Merchant config the running gateway is serving (kind "rest"). */
+  merchantId?: string;
 }
 
 const LOG_LIMIT = 500;
@@ -33,7 +37,7 @@ export class GatewayManager {
   private logsBuffer: string[] = [];
   private startedAt: string | undefined;
   private lastError: string | undefined;
-  private status: { kind?: string; port?: number; baseUrl?: string } = {};
+  private status: { kind?: string; port?: number; baseUrl?: string; merchantId?: string } = {};
 
   constructor(private readonly repoRoot: string) {}
 
@@ -53,6 +57,10 @@ export class GatewayManager {
     const port = req.port ?? 8787;
     const baseUrl = req.baseUrl ?? `http://localhost:${port}`;
     const entry = join(this.repoRoot, "apps", "gateway", "src", "run.ts");
+    const merchantId =
+      req.kind === "rest"
+        ? req.merchantId ?? (req.configPath ? basename(req.configPath).replace(/\.json$/, "") : undefined)
+        : undefined;
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       PORT: String(port),
@@ -72,7 +80,7 @@ export class GatewayManager {
     this.logsBuffer = [];
     this.startedAt = new Date().toISOString();
     this.lastError = undefined;
-    this.status = { kind: req.kind, port, baseUrl };
+    this.status = { kind: req.kind, port, baseUrl, merchantId };
     this.pushLog(`starting gateway (${req.kind}) on :${port} → ${baseUrl}`);
 
     this.child = spawn(process.execPath, ["--import", "tsx", entry], {
@@ -111,6 +119,7 @@ export class GatewayManager {
       baseUrl: this.status.baseUrl,
       startedAt: this.startedAt,
       lastError: this.lastError,
+      merchantId: this.status.merchantId,
     };
   }
 }

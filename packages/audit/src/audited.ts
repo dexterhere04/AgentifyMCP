@@ -216,6 +216,7 @@ export function createAuditedCommerce(
     inventory: provider.inventory,
     pricing: provider.pricing,
     orders: provider.orders,
+    recommendations: provider.recommendations,
     cart: provider.cart ? wrapCart(provider.cart) : undefined,
     checkout: provider.checkout ? wrapCheckout(provider.checkout) : undefined,
   };

@@ -111,6 +111,7 @@ describe("MCP protocol over Streamable HTTP", () => {
       "cancel_checkout",
       "get_order",
       "get_audit_trail",
+      "get_recommendations",
     ]);
     await gateway.mcp.close();
   });
@@ -339,7 +340,7 @@ describe("gateway HTTP surfaces", () => {
     const body = (await index.json()) as { endpoints: Record<string, string>; capabilities: string[] };
     expect(body.endpoints.mcp).toContain("/mcp");
     expect(body.endpoints.ucp).toContain("/.well-known/ucp");
-    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing", "cart", "checkout", "orders"]);
+    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing", "cart", "checkout", "orders", "recommendations"]);
     await gateway.mcp.close();
   });
 

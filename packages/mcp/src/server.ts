@@ -141,6 +141,20 @@ function renderText(tool: string, data: unknown): string {
     return `Audit trail for checkout ${trail.checkoutId} (${trail.events.length} event(s))\n` +
       (lines.join("\n") || "  (no events)");
   }
+  if (tool === "get_recommendations") {
+    const recs = data as Array<{
+      productId: string;
+      variantId: string;
+      title: string;
+      kind: string;
+      reason: string;
+      price: { amount: number; currency: string };
+      inStock: boolean;
+    }>;
+    if (recs.length === 0) return "No recommendations for this cart.";
+    const lines = recs.map((r, i) => `${i + 1}. [${r.kind}] ${r.title} — ${moneyText(r.price.amount, r.price.currency)} (${r.inStock ? "in stock" : "low stock"}) — ${r.reason} | variantId=${r.variantId}`);
+    return "Recommendations (budget-aware):\n" + lines.join("\n");
+  }
   if (tool === "search_catalog") {
     const r = data as {
       items: Array<{

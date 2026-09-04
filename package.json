@@ -23,7 +23,9 @@
     "docs:build": "vitepress build docs && node scripts/postbuild-docs.mjs",
     "dashboard": "tsx apps/dashboard/src/api/index.ts",
     "dashboard:web": "pnpm exec vite --config apps/dashboard/ui/vite.config.ts",
-    "dashboard:build": "pnpm exec vite build --config apps/dashboard/ui/vite.config.ts"
+    "dashboard:build": "pnpm exec vite build --config apps/dashboard/ui/vite.config.ts",
+    "testing:store": "tsx testing/basic-store/server.ts",
+    "demo:basic": "tsx scripts/basic-store-demo.ts"
   },
   "devDependencies": {
     "@agentify/adapter-mock": "workspace:*",
@@ -37,6 +39,7 @@
     "@agentify/ucp": "workspace:*",
     "@changesets/cli": "^2.27.0",
     "@hono/node-server": "^1.14.0",
+    "hono": "^4.13.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^26.0.0",
     "tsx": "^4.19.0",
