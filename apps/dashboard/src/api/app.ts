@@ -16,12 +16,22 @@ import { AgentConfigStore, defaultAgentConfig, MerchantStore, type AgentConfig }
 import { GatewayManager } from "./gateway-manager.js";
 import { DemoStoreManager } from "./demo-store-manager.js";
 import { buildLandscape } from "./landscape.js";
+import {
+  AgentPresetStore,
+  LlmSettingsStore,
+  runAgentChat,
+  slugify,
+  type AgentPreset,
+  type ChatMessage,
+  type LlmProviderKind,
+} from "./agent-runtime.js";
 
 export interface DashboardOptions {
   repoRoot: string;
   dataDir: string;
   auditDbPath?: string;
   agentsDir?: string;
+  playgroundDir?: string;
 }
 
 const SCHEMA_REL = join("packages", "adapter-rest", "schemas", "merchant-config.schema.json");
@@ -199,6 +209,9 @@ function flattenLeaves(value: unknown, prefix = ""): Array<{ path: string; sampl
 export function createDashboardApp(opts: DashboardOptions): Hono {
   const store = new MerchantStore(opts.dataDir);
   const agents = new AgentConfigStore(opts.agentsDir ?? join(opts.dataDir, "..", "agents"));
+  const playgroundDir = opts.playgroundDir ?? join(opts.dataDir, "..", "playground");
+  const llm = new LlmSettingsStore(playgroundDir);
+  const presets = new AgentPresetStore(join(playgroundDir, "presets"));
   const manager = new GatewayManager(opts.repoRoot);
   const demoStore = new DemoStoreManager(opts.repoRoot);
   const schema = readFileSync(join(opts.repoRoot, SCHEMA_REL), "utf8");
@@ -206,6 +219,18 @@ export function createDashboardApp(opts: DashboardOptions): Hono {
   const audit = new SqliteAuditStore(auditPath);
 
   const app = new Hono();
+
+  // CORS: the dashboard UI may be hosted on a different origin (e.g. Vercel CDN).
+  app.use("*", async (c, next) => {
+    const origin = c.req.header("origin");
+    const allow = origin ?? "*";
+    c.header("Access-Control-Allow-Origin", allow);
+    c.header("Vary", "Origin");
+    c.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
+    c.header("Access-Control-Allow-Headers", "content-type, authorization, x-requested-with");
+    if (c.req.method === "OPTIONS") return c.body(null, 204);
+    await next();
+  });
 
   // merchants
   app.get("/api/merchants", (c) => c.json(store.list()));
@@ -272,6 +297,113 @@ export function createDashboardApp(opts: DashboardOptions): Hono {
       return c.json({ error: "not_found" }, 404);
     }
   });
+  // ---- LLM provider (used to test agents in the playground) --------------
+  app.get("/api/llm/provider", (c) => c.json(llm.publicView()));
+  app.put("/api/llm/provider", async (c) => {
+    const raw = (await c.req.json()) as Partial<{
+      kind: LlmProviderKind;
+      model?: string;
+      baseUrl?: string;
+      apiKey?: string;
+    }>;
+    if (!raw.kind) return c.json({ error: "kind is required" }, 400);
+    const prev = llm.get();
+    let apiKey = prev.apiKey;
+    if (typeof raw.apiKey === "string") apiKey = raw.apiKey.trim() ? raw.apiKey.trim() : undefined;
+    llm.save({
+      kind: raw.kind,
+      ...(raw.model?.trim() ? { model: raw.model.trim() } : {}),
+      ...(raw.baseUrl?.trim() ? { baseUrl: raw.baseUrl.trim() } : {}),
+      ...(apiKey ? { apiKey } : {}),
+    });
+    return c.json({ ok: true, provider: llm.publicView() });
+  });
+
+  // ---- named agent presets + public chat endpoint ------------------------
+  const originOf = (c: import("hono").Context) => new URL(c.req.url).origin;
+
+  app.get("/api/agents/presets", (c) => c.json(presets.list()));
+  app.put("/api/agents/presets/:slug", async (c) => {
+    const slug = c.req.param("slug");
+    const raw = (await c.req.json()) as { name?: string; merchantId?: string; config?: Partial<AgentConfig> };
+    if (!raw.name?.trim()) return c.json({ error: "name is required" }, 400);
+    if (!raw.merchantId) return c.json({ error: "merchantId is required" }, 400);
+    let merchantConfig: RestAdapterConfig;
+    try {
+      merchantConfig = store.get(raw.merchantId);
+    } catch {
+      return c.json({ error: "merchant not found" }, 404);
+    }
+    const config = { ...defaultAgentConfig(), ...(raw.config ?? {}) };
+    if (!config.agentName?.trim()) config.agentName = merchantConfig.merchant.name;
+    const now = new Date().toISOString();
+    const existing = presets.list().find((p) => p.slug === slug);
+    const preset: AgentPreset = {
+      slug,
+      name: raw.name.trim(),
+      merchantId: raw.merchantId,
+      config,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    };
+    presets.save(preset);
+    return c.json({ ok: true, preset, endpoint: `${originOf(c)}/api/agents/${slug}/chat` });
+  });
+  app.delete("/api/agents/presets/:slug", (c) => {
+    try {
+      presets.remove(c.req.param("slug"));
+      return c.json({ ok: true });
+    } catch {
+      return c.json({ error: "not_found" }, 404);
+    }
+  });
+
+  app.post("/api/agents/chat", async (c) => {
+    const body = (await c.req.json()) as { merchantId?: string; config?: Partial<AgentConfig>; messages?: ChatMessage[] };
+    if (!body.merchantId || !Array.isArray(body.messages)) {
+      return c.json({ error: "merchantId and messages are required" }, 400);
+    }
+    let merchantConfig: RestAdapterConfig;
+    try {
+      merchantConfig = store.get(body.merchantId);
+    } catch {
+      return c.json({ error: "merchant not found" }, 404);
+    }
+    const agent = { ...defaultAgentConfig(), ...(body.config ?? {}) };
+    const result = await runAgentChat({
+      merchant: merchantConfig,
+      agent,
+      settings: llm.get(),
+      messages: body.messages,
+    });
+    return c.json(result);
+  });
+
+  app.post("/api/agents/:slug/chat", async (c) => {
+    const slug = c.req.param("slug");
+    const body = (await c.req.json()) as { messages?: ChatMessage[] };
+    if (!Array.isArray(body.messages)) return c.json({ error: "messages are required" }, 400);
+    let preset: AgentPreset;
+    try {
+      preset = presets.get(slug);
+    } catch {
+      return c.json({ error: "agent preset not found" }, 404);
+    }
+    let merchantConfig: RestAdapterConfig;
+    try {
+      merchantConfig = store.get(preset.merchantId);
+    } catch {
+      return c.json({ error: "preset merchant no longer exists" }, 404);
+    }
+    const result = await runAgentChat({
+      merchant: merchantConfig,
+      agent: preset.config,
+      settings: llm.get(),
+      messages: body.messages,
+    });
+    return c.json(result);
+  });
+
   app.post("/api/merchants/upsell/preview", async (c) => {
     const body = (await c.req.json()) as { budgetMinor?: number };
     const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });

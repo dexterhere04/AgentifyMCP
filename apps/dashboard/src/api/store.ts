@@ -60,6 +60,14 @@ export interface AgentConfig {
     overrides: Array<{ productId: string; suggestProductId: string; note?: string }>;
   };
   capabilities: Record<string, boolean>;
+  /** Conversation voice. */
+  tone?: "friendly" | "professional" | "concise";
+  /** LLM sampling temperature used when this agent is tested/served (0..2). */
+  temperature?: number;
+  /** Maximum tokens the agent may produce per reply. */
+  maxTokens?: number;
+  /** Whether the agent should keep buyer context across a conversation. */
+  memory?: boolean;
 }
 
 export function defaultAgentConfig(): AgentConfig {
@@ -71,6 +79,10 @@ export function defaultAgentConfig(): AgentConfig {
     checkout: { mode: "in_app" },
     recommendations: { enabled: true, maxSuggestions: 3, budgetGuard: true, overrides: [] },
     capabilities: {},
+    tone: "friendly",
+    temperature: 0.7,
+    maxTokens: 700,
+    memory: true,
   };
 }
 

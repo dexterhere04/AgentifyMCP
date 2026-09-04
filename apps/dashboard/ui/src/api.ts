@@ -1,5 +1,17 @@
+/* API origin. On Vercel the built UI lives on the CDN and talks to your
+   always-on dashboard backend, so the origin is injected at build time via
+   VITE_API_ORIGIN (or set at runtime in localStorage under agentify.apiOrigin).
+   Left empty, the UI calls the same origin (/api) — the local dev default. */
+function apiOrigin(): string {
+  const runtime = typeof localStorage !== "undefined" ? (localStorage.getItem("agentify.apiOrigin") ?? "") : "";
+  const envOrigin = (import.meta.env?.VITE_API_ORIGIN as string | undefined) ?? "";
+  return (runtime.trim() || envOrigin.trim()).replace(/\/+$/, "");
+}
+
+const API_ORIGIN = apiOrigin();
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_ORIGIN}/api${path}`, {
     ...init,
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
   });
@@ -32,6 +44,13 @@ export const apiJson = {
   agentTools: (id: string) => api<{ capabilities: string[]; tools: string[] }>(`/merchants/${id}/agent/tools`),
   agentKit: (id: string) => api<AgentKit>(`/merchants/${id}/agent/kit`),
   upsellPreview: (budgetMinor?: number) => api<{ items: RecommendationItem[] }>("/merchants/upsell/preview", { method: "POST", body: JSON.stringify({ budgetMinor }) }),
+  llmProvider: () => api<PublicLlmSettings>("/llm/provider"),
+  saveLlmProvider: (s: { kind: LlmProviderKind; model?: string; baseUrl?: string; apiKey?: string }) => api<{ ok: boolean; provider: PublicLlmSettings }>("/llm/provider", { method: "PUT", body: JSON.stringify(s) }),
+  agentPresets: () => api<AgentPreset[]>("/agents/presets"),
+  saveAgentPreset: (slug: string, preset: { name: string; merchantId: string; config: AgentConfig }) => api<{ ok: boolean; preset: AgentPreset; endpoint: string }>(`/agents/presets/${slug}`, { method: "PUT", body: JSON.stringify(preset) }),
+  deleteAgentPreset: (slug: string) => api<{ ok: boolean }>(`/agents/presets/${slug}`, { method: "DELETE" }),
+  agentChatTest: (merchantId: string, config: AgentConfig, messages: ChatMessage[]) => api<ChatResult>("/agents/chat", { method: "POST", body: JSON.stringify({ merchantId, config, messages }) }),
+  agentPresetChat: (slug: string, messages: ChatMessage[]) => api<ChatResult>(`/agents/${slug}/chat`, { method: "POST", body: JSON.stringify({ messages }) }),
 };
 
 export interface AgentConfig {
@@ -63,6 +82,38 @@ export interface RecommendationItem {
   reason: string;
   price: { amount: number; currency: string };
   inStock: boolean;
+}
+
+export type LlmProviderKind = "simulate" | "openai" | "openrouter" | "groq" | "custom";
+
+export interface PublicLlmSettings {
+  kind: LlmProviderKind;
+  model?: string;
+  baseUrl?: string;
+  hasKey: boolean;
+  keyHint?: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResult {
+  ok: boolean;
+  reply: string;
+  provider: string;
+  model: string;
+  error?: string;
+}
+
+export interface AgentPreset {
+  slug: string;
+  name: string;
+  merchantId: string;
+  config: AgentConfig;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface MerchantSummary {

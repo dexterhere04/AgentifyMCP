@@ -140,6 +140,13 @@ export function App() {
             )}
           </div>
           <span className="grow" />
+          <button
+            className={`topnav${view.page === "playground" ? " active" : ""}`}
+            onClick={() => void openPlayground()}
+            title="Design and preview the AI assistant shopping this store"
+          >
+            <IconLayers size={15} /> Agent playground
+          </button>
           <StatusPill running={status?.running ?? false} port={status?.port} lastError={status?.lastError} />
         </div>
 

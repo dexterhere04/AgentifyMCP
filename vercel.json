@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "pnpm install --prefer-offline",
+  "buildCommand": "pnpm --filter @agentify/dashboard web:build",
+  "outputDirectory": "apps/dashboard/web-dist",
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
