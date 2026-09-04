@@ -78,8 +78,10 @@ Open the printed payment link (`short_url`) in a browser and use a test card:
 ### Two reconciliation paths
 
 1. **Polling** (no infra, local-friendly): `reconcileByPolling(checkoutId)`
-   calls `orders.fetch(orderId)` until `status === "paid"` and `amount_paid`
-   matches, then finalizes. Used by `pnpm demo:razorpay:real`.
+   polls `paymentLink.fetch(linkId)` until `status === "paid"` and
+   `amount_paid` matches, then finalizes. The buyer pays the hosted payment
+   link, so the link — not any independently created order — is the status
+   source. Used by `pnpm demo:razorpay:real`.
 2. **Webhook** (production): Razorpay POSTs to
    `/webhooks/razorpay` (`payment_link.paid`). Configure the event in the
    dashboard and expose the URL publicly (or a tunnel such as ngrok /

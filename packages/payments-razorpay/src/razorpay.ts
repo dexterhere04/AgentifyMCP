@@ -88,6 +88,22 @@ export class RazorpayGateway implements PaymentGateway {
     };
   }
 
+  /**
+   * Live PAYMENT LINK status for polling. The buyer pays the payment link, and
+   * the link (not any independently created order) reflects the payment, so
+   * this is the reliable entity to poll.
+   */
+  async getPaymentLinkStatus(linkId: string): Promise<PaymentOrderStatus> {
+    const link = (await this.client.paymentLink.fetch(linkId)) as unknown as {
+      status?: string;
+      amount_paid?: number | string;
+    };
+    return {
+      status: link.status ?? "created",
+      amountPaid: Number(link.amount_paid ?? 0),
+    };
+  }
+
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null {
     const p = payload as RazorpayWebhookPayload;
     const event = p?.event;

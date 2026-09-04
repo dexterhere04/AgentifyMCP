@@ -17,17 +17,22 @@ const SECRET = "whsec_test";
 class LocalFakeGateway implements PaymentGateway {
   readonly id = "fake";
   private n = 0;
+  private lastOrderId = "";
   private readonly orders = new Map<string, { amount: { amount: number; currency: string }; paid: boolean }>();
+  private readonly linkToOrder = new Map<string, string>();
 
   async createOrder(r: PaymentOrderRequest): Promise<PaymentOrder> {
     this.n += 1;
     const id = `order_${this.n}`;
     this.orders.set(id, { amount: r.amount, paid: false });
+    this.lastOrderId = id;
     return { id, amount: r.amount, status: "created" };
   }
   async createPaymentLink(r: PaymentLinkRequest): Promise<PaymentLink> {
     this.n += 1;
-    return { id: `plink_${this.n}`, shortUrl: `https://pay.local/${this.n}`, amount: r.amount, status: "created" };
+    const id = `plink_${this.n}`;
+    this.linkToOrder.set(id, this.lastOrderId);
+    return { id, shortUrl: `https://pay.local/${this.n}`, amount: r.amount, status: "created" };
   }
   markPaid(orderId: string, amountOverride?: number): void {
     const record = this.orders.get(orderId);
@@ -35,10 +40,17 @@ class LocalFakeGateway implements PaymentGateway {
     record.paid = true;
     if (amountOverride !== undefined) record.amount = { ...record.amount, amount: amountOverride };
   }
-  async getOrderStatus(orderId: string): Promise<{ status: string; amountPaid?: number }> {
+  private orderStatus(orderId: string): { status: string; amountPaid?: number } {
     const record = this.orders.get(orderId);
     if (!record) return { status: "created", amountPaid: 0 };
     return { status: record.paid ? "paid" : "created", amountPaid: record.paid ? record.amount.amount : 0 };
+  }
+  async getOrderStatus(orderId: string): Promise<{ status: string; amountPaid?: number }> {
+    return this.orderStatus(orderId);
+  }
+  async getPaymentLinkStatus(linkId: string): Promise<{ status: string; amountPaid?: number }> {
+    const orderId = this.linkToOrder.get(linkId) ?? "";
+    return this.orderStatus(orderId);
   }
   verifyWebhookSignature(raw: string, signature: string): boolean {
     const expected = createHmac("sha256", SECRET).update(raw, "utf8").digest("hex");

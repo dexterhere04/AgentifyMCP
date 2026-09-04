@@ -82,6 +82,7 @@ async function main(): Promise<void> {
 
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let order;
+  let attempts = 0;
   while (Date.now() < deadline) {
     try {
       order = await gateway.payments!.reconcileByPolling(intent.checkoutId);
@@ -89,6 +90,10 @@ async function main(): Promise<void> {
     } catch (err) {
       if (err instanceof PaymentError && err.code === "PAYMENT_NOT_READY") {
         process.stdout.write(".");
+        attempts += 1;
+        if (attempts % 10 === 0) {
+          console.log(`  still waiting for payment (${Math.round((Date.now() - (deadline - POLL_TIMEOUT_MS)) / 1000)}s) — open the link and pay…`);
+        }
         await sleep(POLL_INTERVAL_MS);
         continue;
       }

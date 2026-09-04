@@ -72,6 +72,12 @@ export interface PaymentGateway {
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null;
   /** Optional: fetch a payment order's live status (for polling reconciliation). */
   getOrderStatus?(orderId: string): Promise<PaymentOrderStatus>;
+  /**
+   * Optional: fetch a payment link's live status. Preferred for polling when the
+   * buyer pays a hosted link whose internal order differs from any order the
+   * gateway created independently.
+   */
+  getPaymentLinkStatus?(linkId: string): Promise<PaymentOrderStatus>;
 }
 
 /** Result of starting the payment flow for a checkout. */

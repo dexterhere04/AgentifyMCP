@@ -195,13 +195,18 @@ export class PaymentOrchestrator {
     const existing = this.finalizedCheckouts.get(checkoutId);
     if (existing) return existing;
 
-    if (!this.gateway.getOrderStatus) {
+    if (!this.gateway.getOrderStatus && !this.gateway.getPaymentLinkStatus) {
       throw new PaymentError(
         "UNSUPPORTED",
         `gateway "${this.gateway.id}" does not support polling reconciliation`,
       );
     }
-    const status = await this.gateway.getOrderStatus(intent.paymentOrderId);
+    // Prefer polling the PAYMENT LINK when supported: for hosted payment links
+    // the buyer pays the link (whose internal order differs from any order the
+    // gateway created), so the link is the reliable status source.
+    const status = this.gateway.getPaymentLinkStatus
+      ? await this.gateway.getPaymentLinkStatus(intent.paymentLinkId)
+      : await this.gateway.getOrderStatus!(intent.paymentOrderId);
     if (status.status !== "paid") {
       throw new PaymentError("PAYMENT_NOT_READY", `payment order is "${status.status}"`);
     }
