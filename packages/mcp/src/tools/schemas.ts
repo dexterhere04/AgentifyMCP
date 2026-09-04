@@ -172,6 +172,13 @@ export const CancelCheckoutArgs = z
   .object({ checkoutId: z.string(), meta: AgentMetaRequired })
   .strict();
 
+export const GetOrderArgs = z
+  .object({
+    orderId: z.string().describe("Order id returned by complete_checkout / webhook confirmation."),
+    meta: AgentMetaRequired,
+  })
+  .strict();
+
 export const ToolArgSchemas = {
   search_catalog: SearchCatalogArgs,
   get_product: GetProductArgs,
@@ -187,6 +194,7 @@ export const ToolArgSchemas = {
   get_checkout: GetCheckoutArgs,
   complete_checkout: CompleteCheckoutArgs,
   cancel_checkout: CancelCheckoutArgs,
+  get_order: GetOrderArgs,
 } as const;
 
 export type ToolName = keyof typeof ToolArgSchemas;

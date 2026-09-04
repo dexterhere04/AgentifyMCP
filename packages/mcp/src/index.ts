@@ -4,7 +4,14 @@ export {
   ToolError,
   isToolFailure,
 } from "./registry.js";
-export type { ToolCallResult, ToolSpec, ToolCallFailure, ToolCallSuccess } from "./registry.js";
+export type {
+  ToolCallResult,
+  ToolSpec,
+  ToolCallFailure,
+  ToolCallSuccess,
+  CompleteCheckoutFn,
+  CommerceToolRegistryOptions,
+} from "./registry.js";
 export { ToolArgSchemas } from "./tools/schemas.js";
 export type { ToolName } from "./tools/schemas.js";
 export {

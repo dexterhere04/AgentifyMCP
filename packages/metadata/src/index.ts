@@ -65,6 +65,9 @@ function mcpToolNames(capabilities: CapabilityName[]): string {
   if (has("checkout")) {
     tools.push("create_checkout", "get_checkout", "complete_checkout", "cancel_checkout");
   }
+  if (has("orders")) {
+    tools.push("get_order");
+  }
   return tools.join(", ");
 }
 

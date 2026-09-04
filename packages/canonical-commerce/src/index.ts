@@ -5,5 +5,6 @@ export * from "./errors.js";
 export * from "./merchant.js";
 export * from "./money.js";
 export * from "./offer.js";
+export * from "./payment.js";
 export * from "./product.js";
 export * from "./provider.js";

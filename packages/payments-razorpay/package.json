@@ -1,0 +1,17 @@
+{
+  "name": "@gateway/payments-razorpay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gateway/canonical-commerce": "workspace:*",
+    "razorpay": "^2.9.8"
+  }
+}

@@ -13,14 +13,19 @@
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present run typecheck",
     "gateway": "tsx apps/gateway/src/run.ts",
-    "demo": "tsx scripts/agent-demo.ts"
+    "demo": "tsx scripts/agent-demo.ts",
+    "demo:second": "tsx scripts/second-store-demo.ts",
+    "demo:razorpay": "tsx scripts/razorpay-demo.ts"
   },
   "devDependencies": {
     "@gateway/adapter-mock": "workspace:*",
+    "@gateway/adapter-rest": "workspace:*",
     "@gateway/app-gateway": "workspace:*",
     "@gateway/canonical-commerce": "workspace:*",
     "@gateway/mcp": "workspace:*",
     "@gateway/metadata": "workspace:*",
+    "@gateway/payments": "workspace:*",
+    "@gateway/payments-razorpay": "workspace:*",
     "@gateway/ucp": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@hono/node-server": "^1.14.0",

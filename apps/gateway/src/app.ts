@@ -3,6 +3,7 @@ import { createMockCommerceProvider } from "@gateway/adapter-mock";
 import {
   detectCapabilities,
   type CommerceProvider,
+  type PaymentGateway,
   isProviderError,
 } from "@gateway/canonical-commerce";
 import { createMetadata, type GeneratedMetadata } from "@gateway/metadata";
@@ -12,9 +13,12 @@ import {
   SERVER_VERSION,
   type StreamableHttpEndpoint,
 } from "@gateway/mcp";
+import { InMemoryAuditStore, PaymentOrchestrator } from "@gateway/payments";
+import type { AuditStore } from "@gateway/payments";
 import {
   assertValidUcpProfile,
   buildUcpProfile,
+  UCP_VERSION,
   type BusinessDiscoveryProfile,
 } from "@gateway/ucp";
 import { loadConfig, type GatewayConfig } from "./config.js";
@@ -27,30 +31,73 @@ export interface Gateway {
   mcp: StreamableHttpEndpoint;
   /** The UCP business discovery profile served at /.well-known/ucp. */
   ucpProfile: BusinessDiscoveryProfile;
+  /** Audit trail of money-changing actions. */
+  audit: AuditStore;
+  /** Present when a payment gateway is wired. */
+  payments?: PaymentOrchestrator;
+  /** Id of the wired payment gateway (e.g. "razorpay"). */
+  paymentGatewayId?: string;
 }
 
 export interface CreateGatewayOptions {
   config?: GatewayConfig;
   provider?: CommerceProvider;
+  /** Wire a payment provider; activates async, webhook-confirmed checkout. */
+  payment?: { gateway: PaymentGateway; handlerName?: string };
 }
 
 /**
- * Compose the gateway: one provider drives MCP + metadata. The MCP endpoint
- * and UCP/metadata generation are pure outputs of the provider's capability
- * graph — no merchant-specific logic lives here.
+ * Compose the gateway: one provider drives MCP + metadata; an optional payment
+ * gateway makes checkout async (payment link + webhook confirmation). The MCP
+ * endpoint and UCP/metadata generation remain pure outputs of the provider's
+ * capability graph — no merchant-specific logic lives here.
  */
 export async function createGateway(options: CreateGatewayOptions = {}): Promise<Gateway> {
   const config = options.config ?? loadConfig();
   const provider: CommerceProvider =
     options.provider ?? createMockCommerceProvider({ storeUrl: config.storeUrl });
   const metadata = await createMetadata(provider, { baseUrl: config.baseUrl });
-  const mcp = createStreamableHttpEndpoint(provider);
   const capabilities = detectCapabilities(provider);
+
+  const audit = new InMemoryAuditStore();
+  let payments: PaymentOrchestrator | undefined;
+  if (options.payment) {
+    const merchant = await provider.merchant();
+    payments = new PaymentOrchestrator(
+      provider,
+      options.payment.gateway,
+      audit,
+      merchant.id,
+    );
+  }
+
+  const completeCheckout = payments
+    ? (checkoutId: string, opts: { approval: { buyerApproved: boolean }; agentProfile?: string }) =>
+        payments.startPayment(checkoutId, { agent: opts.agentProfile })
+    : undefined;
+
+  const mcp = createStreamableHttpEndpoint(provider, completeCheckout ? { completeCheckout } : {});
 
   // UCP business discovery profile. Built and validated at startup so a
   // malformed/inconsistent configuration fails fast instead of serving an
   // invalid discovery document.
-  const ucpProfile = buildUcpProfile({ capabilities, baseUrl: config.baseUrl });
+  const paymentHandlers =
+    options.payment && payments
+      ? {
+          [options.payment.handlerName ?? "dev.gateway.razorpay.test"]: [
+            {
+              version: UCP_VERSION,
+              id: "test",
+              config: {
+                mode: "test",
+                provider: options.payment.gateway.id,
+                webhook_url: `${config.baseUrl}/webhooks/razorpay`,
+              },
+            },
+          ],
+        }
+      : undefined;
+  const ucpProfile = buildUcpProfile({ capabilities, baseUrl: config.baseUrl, paymentHandlers });
   assertValidUcpProfile(ucpProfile);
 
   const app = new Hono();
@@ -59,7 +106,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     c.json({
       service: SERVER_NAME,
       version: SERVER_VERSION,
-      description: "Agentic Commerce Gateway (MVP 0 + MVP 1 + MVP 2)",
+      description: "Agentic Commerce Gateway",
       endpoints: {
         mcp: `${config.baseUrl}/mcp`,
         ucp: `${config.baseUrl}/.well-known/ucp`,
@@ -99,6 +146,19 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
       "Cache-Control": "max-age=60",
     }),
   );
+
+  if (payments) {
+    app.post("/webhooks/razorpay", async (c) => {
+      const rawBody = await c.req.text();
+      const signature = c.req.header("x-razorpay-signature") ?? null;
+      try {
+        const order = await payments.handleWebhook(rawBody, signature);
+        return c.json({ ok: true, order });
+      } catch (err) {
+        return paymentWebhookError(c, err);
+      }
+    });
+  }
 
   // Read-only developer/search endpoints (useful for agents and curl demos).
   app.get("/catalog/search", async (c) => {
@@ -142,7 +202,17 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     return c.json({ error: { code: "INTERNAL", message: err.message } });
   });
 
-  return { app, config, provider, metadata, mcp, ucpProfile };
+  return {
+    app,
+    config,
+    provider,
+    metadata,
+    mcp,
+    ucpProfile,
+    audit,
+    payments,
+    paymentGatewayId: options.payment?.gateway.id,
+  };
 }
 
 function providerErrorResponse(c: Context, err: unknown): Response {
@@ -160,4 +230,21 @@ function providerErrorResponse(c: Context, err: unknown): Response {
     return c.json({ error: { code: err.code, message: err.message, details: err.details } }, status);
   }
   return c.json({ error: { code: "INTERNAL", message: err instanceof Error ? err.message : "internal error" } }, 500);
+}
+
+function paymentWebhookError(c: Context, err: unknown): Response {
+  const code = (err as { code?: string })?.code ?? "INTERNAL";
+  const status =
+    code === "NOT_FOUND"
+      ? 404
+      : code === "INVALID_SIGNATURE" || code === "AMOUNT_MISMATCH" || code === "CURRENCY_MISMATCH"
+        ? 400
+        : 502;
+  return c.json(
+    {
+      ok: false,
+      error: { code, message: err instanceof Error ? err.message : String(err) },
+    },
+    status,
+  );
 }

@@ -12,6 +12,7 @@ import type { CommerceProvider } from "@gateway/canonical-commerce";
 import {
   CommerceToolRegistry,
   isToolFailure,
+  type CommerceToolRegistryOptions,
   type ToolCallResult,
   type ToolSpec,
 } from "./registry.js";
@@ -84,12 +85,37 @@ function renderOrder(data: unknown): string {
   return `order ${order.id} [${order.status}]${order.checkoutId ? ` checkoutId=${order.checkoutId}` : ""}${order.total ? ` total=${moneyText(order.total.amount, order.total.currency)}` : ""}`;
 }
 
+function renderPaymentIntent(data: unknown): string {
+  const intent = data as {
+    checkoutId: string;
+    status: string;
+    provider: string;
+    paymentOrderId: string;
+    paymentLinkId: string;
+    paymentUrl: string;
+    amount: { amount: number; currency: string };
+  };
+  return [
+    `checkout ${intent.checkoutId} [${intent.status}]`,
+    `  provider     : ${intent.provider}`,
+    `  order id     : ${intent.paymentOrderId}`,
+    `  payment link : ${intent.paymentLinkId}`,
+    `  amount       : ${moneyText(intent.amount.amount, intent.amount.currency)}`,
+    `  → buyer must approve and pay here: ${intent.paymentUrl}`,
+  ].join("\n");
+}
+
 
 /** Render a tool result as human-readable text (structured data is also returned). */
 function renderText(tool: string, data: unknown): string {
   if (CART_TOOLS.has(tool)) return renderCart(data);
   if (CHECKOUT_TOOLS.has(tool)) return renderCheckout(data);
-  if (tool === "complete_checkout") return renderOrder(data);
+  if (tool === "complete_checkout") {
+    const maybeIntent = data as { paymentUrl?: unknown };
+    if (maybeIntent.paymentUrl !== undefined) return renderPaymentIntent(data);
+    return renderOrder(data);
+  }
+  if (tool === "get_order") return renderOrder(data);
   if (tool === "search_catalog") {
     const r = data as {
       items: Array<{
@@ -205,8 +231,11 @@ function toCallResult(tool: string, outcome: ToolCallResult<unknown>): CallToolR
 /**
  * Build an SDK Server bound to a provider. Create one per HTTP session.
  */
-export function createCommerceMcpServer(provider: CommerceProvider): Server {
-  const registry = new CommerceToolRegistry(provider);
+export function createCommerceMcpServer(
+  provider: CommerceProvider,
+  options: CommerceToolRegistryOptions = {},
+): Server {
+  const registry = new CommerceToolRegistry(provider, options);
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
@@ -246,11 +275,14 @@ interface Session {
  * it can be mounted on any runtime (Node/Hono/Workers). Sessions are keyed by
  * the `Mcp-Session-Id` header and each session gets its own Server+transport.
  */
-export function createStreamableHttpEndpoint(provider: CommerceProvider): StreamableHttpEndpoint {
+export function createStreamableHttpEndpoint(
+  provider: CommerceProvider,
+  options: CommerceToolRegistryOptions = {},
+): StreamableHttpEndpoint {
   const sessions = new Map<string, Session>();
 
   function createSession(): Session {
-    const server = createCommerceMcpServer(provider);
+    const server = createCommerceMcpServer(provider, options);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       enableJsonResponse: true,

@@ -109,6 +109,7 @@ describe("MCP protocol over Streamable HTTP", () => {
       "get_checkout",
       "complete_checkout",
       "cancel_checkout",
+      "get_order",
     ]);
     await gateway.mcp.close();
   });
@@ -172,7 +173,7 @@ describe("MCP protocol over Streamable HTTP", () => {
   it("unknown tool name is rejected", async () => {
     const gateway = await startGateway();
     const sid = await newSession(gateway);
-    const call = await sendRpc(gateway, "tools/call", { name: "get_order", arguments: { id: "x" } }, sid);
+    const call = await sendRpc(gateway, "tools/call", { name: "get_refund", arguments: { id: "x" } }, sid);
     const result = (call.payload as JsonRpcResponse).result as { isError?: boolean; content: Array<{ text: string }> };
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain("Unknown tool");
@@ -337,7 +338,7 @@ describe("gateway HTTP surfaces", () => {
     const body = (await index.json()) as { endpoints: Record<string, string>; capabilities: string[] };
     expect(body.endpoints.mcp).toContain("/mcp");
     expect(body.endpoints.ucp).toContain("/.well-known/ucp");
-    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing", "cart", "checkout"]);
+    expect(body.capabilities).toEqual(["catalog", "inventory", "pricing", "cart", "checkout", "orders"]);
     await gateway.mcp.close();
   });
 
@@ -363,10 +364,10 @@ describe("gateway HTTP surfaces", () => {
     expect(shopping.endpoint).toBe("https://demo.example/mcp");
     expect(profile.ucp.capabilities["dev.ucp.shopping.catalog.search"]).toBeDefined();
     expect(profile.ucp.capabilities["dev.ucp.shopping.catalog.lookup"]).toBeDefined();
-    // the merchant supports cart + checkout, but not orders or payments
+    // the merchant supports cart + checkout + order lookup, but no payments yet
     expect(profile.ucp.capabilities["dev.ucp.shopping.cart"]).toBeDefined();
     expect(profile.ucp.capabilities["dev.ucp.shopping.checkout"]).toBeDefined();
-    expect(profile.ucp.capabilities["dev.ucp.shopping.order"]).toBeUndefined();
+    expect(profile.ucp.capabilities["dev.ucp.shopping.order"]).toBeDefined();
     expect(profile.ucp.payment_handlers).toEqual({});
     await gateway.mcp.close();
   });

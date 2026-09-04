@@ -47,6 +47,16 @@ export interface ToolCallFailure {
 
 export type ToolCallResult<T> = ToolCallSuccess<T> | ToolCallFailure;
 
+/** When present, `complete_checkout` delegates here (payment orchestration). */
+export type CompleteCheckoutFn = (
+  checkoutId: string,
+  options: { approval: { buyerApproved: boolean }; agentProfile?: string },
+) => Promise<unknown>;
+
+export interface CommerceToolRegistryOptions {
+  completeCheckout?: CompleteCheckoutFn;
+}
+
 const TOOLS: Record<
   ToolName,
   { description: string; enabled: (caps: Capabilities) => boolean }
@@ -112,12 +122,17 @@ const TOOLS: Record<
   },
   complete_checkout: {
     description:
-      "Complete a checkout. REQUIRES explicit human approval (approval.buyerApproved = true) and meta.ucp-agent.profile. Creates an order; no live payment is processed in this environment.",
+      "Complete a checkout. REQUIRES explicit human approval (approval.buyerApproved = true) and meta.ucp-agent.profile. When a payment provider is configured this starts the payment and returns a payment URL for buyer approval; otherwise it finalizes the order directly.",
     enabled: (caps) => caps.checkout,
   },
   cancel_checkout: {
     description: "Cancel a checkout that has not been completed.",
     enabled: (caps) => caps.checkout,
+  },
+  get_order: {
+    description:
+      "Retrieve an order by id after a completed checkout (e.g. after payment confirmation). Requires meta.ucp-agent.profile.",
+    enabled: (caps) => caps.orders,
   },
 };
 
@@ -132,7 +147,10 @@ export class CommerceToolRegistry {
   private readonly caps: Capabilities;
   private readonly defaultCurrencyPromise: Promise<string>;
 
-  constructor(private readonly provider: CommerceProvider) {
+  constructor(
+    private readonly provider: CommerceProvider,
+    private readonly options: CommerceToolRegistryOptions = {},
+  ) {
     this.caps = detectCapabilities(provider);
     this.defaultCurrencyPromise = provider.merchant().then((m) => m.defaultCurrency);
   }
@@ -333,10 +351,11 @@ export class CommerceToolRegistry {
         if (!this.provider.checkout) {
           throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
         }
-        return this.provider.checkout.complete(a.checkoutId, {
-          approval: { buyerApproved: a.approval.buyerApproved },
-          agentProfile,
-        });
+        const approval = { buyerApproved: a.approval.buyerApproved };
+        if (this.options.completeCheckout) {
+          return this.options.completeCheckout(a.checkoutId, { approval, agentProfile });
+        }
+        return this.provider.checkout.complete(a.checkoutId, { approval, agentProfile });
       }
       case "cancel_checkout": {
         const a = args as z.infer<typeof ToolArgSchemas.cancel_checkout>;
@@ -344,6 +363,13 @@ export class CommerceToolRegistry {
           throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
         }
         return this.provider.checkout.cancel(a.checkoutId, { agentProfile });
+      }
+      case "get_order": {
+        const a = args as z.infer<typeof ToolArgSchemas.get_order>;
+        if (!this.provider.orders) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "orders capability unavailable");
+        }
+        return this.provider.orders.get(a.orderId);
       }
     }
   }

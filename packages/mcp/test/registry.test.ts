@@ -20,6 +20,7 @@ const EXPECTED_FULL_LIST = [
   "get_checkout",
   "complete_checkout",
   "cancel_checkout",
+  "get_order",
 ];
 
 describe("CommerceToolRegistry", () => {
@@ -72,7 +73,7 @@ describe("CommerceToolRegistry", () => {
 
   it("rejects unknown tool names", async () => {
     const registry = new CommerceToolRegistry(provider);
-    const res = await registry.call("get_order", {});
+    const res = await registry.call("get_refund", {});
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("INVALID_ARGUMENT");
   });

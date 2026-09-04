@@ -125,6 +125,7 @@ export class MockCommerceProvider implements CommerceProvider {
   pricing: CommerceProvider["pricing"];
   cart: CommerceProvider["cart"];
   checkout: CommerceProvider["checkout"];
+  orders: CommerceProvider["orders"];
 
   private readonly cartRecords = new Map<string, CartRecord>();
   private readonly checkoutRecords = new Map<string, CheckoutRecord>();
@@ -162,6 +163,9 @@ export class MockCommerceProvider implements CommerceProvider {
       get: (id) => this.getCheckout(id),
       complete: (id, options) => this.completeCheckout(id, options),
       cancel: (id, options) => this.cancelCheckout(id, options),
+    };
+    this.orders = {
+      get: (id) => this.getOrder(id),
     };
   }
 
@@ -853,6 +857,17 @@ export class MockCommerceProvider implements CommerceProvider {
     record.checkout.status = "cancelled";
     record.checkout.updatedAt = this.now();
     return record.checkout;
+  }
+
+  // -------------------------------------------------------------------------
+  // CommerceProvider: orders
+  // -------------------------------------------------------------------------
+
+  async getOrder(id: string): Promise<Order> {
+    await this.throttle();
+    const order = this.orderStore.get(id);
+    if (!order) throw notFound("order", id);
+    return order;
   }
 }
 
