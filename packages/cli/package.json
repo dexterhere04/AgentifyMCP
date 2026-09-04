@@ -15,7 +15,9 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "license": "MIT",
   "sideEffects": false,
   "dependencies": {
@@ -25,12 +27,20 @@
     "@agentify/gateway": "workspace:*",
     "@agentify/metadata": "workspace:*",
     "@agentify/ucp": "workspace:*",
-    "@hono/node-server": "^1.14.0"
+    "@hono/node-server": "^1.14.0",
+    "@agentify/payments-razorpay": "workspace:*"
   },
   "publishConfig": {
     "access": "public",
-    "bin": { "agentify": "./dist/cli.js" },
-    "exports": { ".": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" } },
+    "bin": {
+      "agentify": "./dist/cli.js"
+    },
+    "exports": {
+      ".": {
+        "types": "./dist/cli.d.ts",
+        "import": "./dist/cli.js"
+      }
+    },
     "types": "./dist/cli.d.ts",
     "main": "./dist/cli.js"
   }

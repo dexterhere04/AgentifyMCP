@@ -51,6 +51,13 @@ export interface PaymentConfirmedEvent {
   status: PaymentEventStatus;
 }
 
+/** Live order status used for polling reconciliation (no webhook needed). */
+export interface PaymentOrderStatus {
+  status: string;
+  /** Minor-unit amount actually paid, when the provider reports it. */
+  amountPaid?: number;
+}
+
 /**
  * A provider-agnostic payment gateway. A real adapter wraps a PSP SDK; fakes
  * implement the same interface so orchestration is fully testable offline.
@@ -63,6 +70,8 @@ export interface PaymentGateway {
   verifyWebhookSignature(rawBody: string, signature: string): boolean;
   /** Parse a provider webhook payload into a normalized payment event. */
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null;
+  /** Optional: fetch a payment order's live status (for polling reconciliation). */
+  getOrderStatus?(orderId: string): Promise<PaymentOrderStatus>;
 }
 
 /** Result of starting the payment flow for a checkout. */

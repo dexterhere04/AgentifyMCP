@@ -16,6 +16,7 @@
     "demo": "tsx scripts/agent-demo.ts",
     "demo:second": "tsx scripts/second-store-demo.ts",
     "demo:razorpay": "tsx scripts/razorpay-demo.ts",
+    "demo:razorpay:real": "tsx scripts/razorpay-demo-real.ts",
     "build": "pnpm -r --if-present run build",
     "clean": "pnpm -r --if-present run clean"
   },

@@ -17,13 +17,28 @@ const SECRET = "whsec_test";
 class LocalFakeGateway implements PaymentGateway {
   readonly id = "fake";
   private n = 0;
+  private readonly orders = new Map<string, { amount: { amount: number; currency: string }; paid: boolean }>();
+
   async createOrder(r: PaymentOrderRequest): Promise<PaymentOrder> {
     this.n += 1;
-    return { id: `order_${this.n}`, amount: r.amount, status: "created" };
+    const id = `order_${this.n}`;
+    this.orders.set(id, { amount: r.amount, paid: false });
+    return { id, amount: r.amount, status: "created" };
   }
   async createPaymentLink(r: PaymentLinkRequest): Promise<PaymentLink> {
     this.n += 1;
     return { id: `plink_${this.n}`, shortUrl: `https://pay.local/${this.n}`, amount: r.amount, status: "created" };
+  }
+  markPaid(orderId: string, amountOverride?: number): void {
+    const record = this.orders.get(orderId);
+    if (!record) throw new Error(`unknown order ${orderId}`);
+    record.paid = true;
+    if (amountOverride !== undefined) record.amount = { ...record.amount, amount: amountOverride };
+  }
+  async getOrderStatus(orderId: string): Promise<{ status: string; amountPaid?: number }> {
+    const record = this.orders.get(orderId);
+    if (!record) return { status: "created", amountPaid: 0 };
+    return { status: record.paid ? "paid" : "created", amountPaid: record.paid ? record.amount.amount : 0 };
   }
   verifyWebhookSignature(raw: string, signature: string): boolean {
     const expected = createHmac("sha256", SECRET).update(raw, "utf8").digest("hex");
@@ -145,5 +160,43 @@ describe("PaymentOrchestrator", () => {
       code: "AMOUNT_MISMATCH",
     });
     expect(audit.list().map((e) => e.event)).toContain("checkout.payment.amount_mismatch");
+  });
+});
+
+describe("PaymentOrchestrator.reconcileByPolling", () => {
+  it("is not ready until the order is paid", async () => {
+    const { orch, gateway, checkout } = await setup();
+    const intent = await orch.startPayment(checkout.id);
+    await expect(orch.reconcileByPolling(checkout.id)).rejects.toMatchObject({
+      code: "PAYMENT_NOT_READY",
+    });
+    gateway.markPaid(intent.paymentOrderId);
+    const order = await orch.reconcileByPolling(checkout.id);
+    expect(order.status).toBe("confirmed");
+  });
+
+  it("is idempotent across polling and webhook paths", async () => {
+    const { orch, gateway, checkout } = await setup();
+    const intent = await orch.startPayment(checkout.id);
+    gateway.markPaid(intent.paymentOrderId);
+    const polled = await orch.reconcileByPolling(checkout.id);
+
+    // a duplicate poll returns the same order
+    const again = await orch.reconcileByPolling(checkout.id);
+    expect(again.id).toBe(polled.id);
+
+    // a late webhook for the same checkout also returns the same order
+    const body = webhookBody({ checkoutId: checkout.id, amount: intent.amount.amount });
+    const webhookOrder = await orch.handleWebhook(JSON.stringify(body), sign(body));
+    expect(webhookOrder.id).toBe(polled.id);
+  });
+
+  it("rejects an amount mismatch when the order was overpaid/underpaid", async () => {
+    const { orch, gateway, checkout } = await setup();
+    const intent = await orch.startPayment(checkout.id);
+    gateway.markPaid(intent.paymentOrderId, intent.amount.amount + 1);
+    await expect(orch.reconcileByPolling(checkout.id)).rejects.toMatchObject({
+      code: "AMOUNT_MISMATCH",
+    });
   });
 });

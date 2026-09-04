@@ -6,6 +6,7 @@ import {
   type PaymentLinkRequest,
   type PaymentOrder,
   type PaymentOrderRequest,
+  type PaymentOrderStatus,
   type Money,
 } from "@agentify/canonical-commerce";
 import { razorpaySignature } from "./razorpay.js";
@@ -21,6 +22,7 @@ export class FakeRazorpayGateway implements PaymentGateway {
   readonly id = "razorpay-fake";
   private orderCounter = 0;
   private linkCounter = 0;
+  private readonly orders = new Map<string, { amount: Money; paid: boolean }>();
 
   constructor(private readonly webhookSecret: string) {}
 
@@ -30,11 +32,26 @@ export class FakeRazorpayGateway implements PaymentGateway {
 
   async createOrder(request: PaymentOrderRequest): Promise<PaymentOrder> {
     this.orderCounter += 1;
+    const id = `order_fake_${this.orderCounter}`;
+    this.orders.set(id, { amount: request.amount, paid: false });
     return {
-      id: `order_fake_${this.orderCounter}`,
+      id,
       amount: FakeRazorpayGateway.asMoney(request.amount.amount, request.amount.currency),
       status: "created",
     };
+  }
+
+  /** Simulate the buyer paying: marks an order as paid for polling tests. */
+  markOrderPaid(orderId: string): void {
+    const record = this.orders.get(orderId);
+    if (!record) throw new Error(`unknown fake order "${orderId}"`);
+    record.paid = true;
+  }
+
+  async getOrderStatus(orderId: string): Promise<PaymentOrderStatus> {
+    const record = this.orders.get(orderId);
+    if (!record) return { status: "created", amountPaid: 0 };
+    return { status: record.paid ? "paid" : "created", amountPaid: record.paid ? record.amount.amount : 0 };
   }
 
   async createPaymentLink(request: PaymentLinkRequest): Promise<PaymentLink> {

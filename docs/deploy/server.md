@@ -13,6 +13,9 @@ Environment:
 | `PORT` | `8787` | HTTP port |
 | `BASE_URL` | `http://localhost:8787` | public origin (used in UCP/metadata) |
 | `STORE_URL` | `= BASE_URL` | storefront origin for product URLs |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | — | enable Razorpay test-mode payments |
+| `RAZORPAY_WEBHOOK_SECRET` | — | webhook HMAC secret (webhook reconciliation) |
+| `RAZORPAY_MODE` | `test` | `test` or `live` |
 
 ## Docker
 

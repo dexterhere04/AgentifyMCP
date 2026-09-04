@@ -8,7 +8,7 @@ import {
   validateRestConfig,
   type RestAdapterConfig,
 } from "@agentify/adapter-rest";
-import type { CommerceProvider } from "@agentify/canonical-commerce";
+import type { CommerceProvider, PaymentGateway } from "@agentify/canonical-commerce";
 import { detectCapabilities } from "@agentify/canonical-commerce";
 import { createMetadata } from "@agentify/metadata";
 import { buildUcpProfile, serializeUcpProfile } from "@agentify/ucp";
@@ -79,13 +79,24 @@ export async function runGenerate(opts: CommonOptions & { out: string; baseUrl: 
   return written;
 }
 
-async function runServe(opts: CommonOptions & { port: number; baseUrl: string }): Promise<void> {
+async function runServe(
+  opts: CommonOptions & { port: number; baseUrl: string; payment?: string },
+): Promise<void> {
   const { serve } = await import("@hono/node-server");
   const { createGateway } = await import("@agentify/gateway");
   const provider = await loadProvider(opts);
+  let payment: PaymentGateway | undefined;
+  if (opts.payment === "razorpay") {
+    const { razorpayGatewayFromEnv } = await import("@agentify/payments-razorpay");
+    payment = razorpayGatewayFromEnv();
+    if (!payment) {
+      throw new Error("--payment razorpay requires RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET env vars");
+    }
+  }
   const gateway = await createGateway({
     config: { port: opts.port, baseUrl: opts.baseUrl, storeUrl: opts.baseUrl },
     provider,
+    ...(payment ? { payment: { gateway: payment, handlerName: "dev.agentify.razorpay.test" } } : {}),
   });
   const server = serve({ fetch: gateway.app.fetch, port: opts.port }, (info) => {
     console.log(`[agentify] listening on http://localhost:${info.port}`);
@@ -93,6 +104,7 @@ async function runServe(opts: CommonOptions & { port: number; baseUrl: string })
     console.log(`[agentify] ucp      ${opts.baseUrl}/.well-known/ucp`);
     console.log(`[agentify] agents.md ${opts.baseUrl}/agents.md`);
     console.log(`[agentify] llms.txt ${opts.baseUrl}/llms.txt`);
+    if (payment) console.log(`[agentify] payment  razorpay webhook ${opts.baseUrl}/webhooks/razorpay`);
   });
   await new Promise<void>((resolvePromise) => {
     process.on("SIGINT", () => {
@@ -112,6 +124,7 @@ function parse(argv: string[]): { command: string | undefined; values: Record<st
       "base-url": { type: "string" },
       port: { type: "string" },
       mock: { type: "boolean", default: false },
+      payment: { type: "string" },
       help: { type: "boolean", default: false },
     },
     allowPositionals: true,
@@ -141,7 +154,7 @@ async function main(): Promise<void> {
     }
     case "serve": {
       const port = Number(values.port ?? 8787);
-      await runServe({ ...common, port, baseUrl });
+      await runServe({ ...common, port, baseUrl, payment: values.payment as string | undefined });
       break;
     }
     case "init": {
@@ -173,14 +186,15 @@ function printHelp(): void {
 USAGE
   agentify init
   agentify generate --config merchant.config.json [--mock] [--out dir] [--base-url url]
-  agentify serve   --config merchant.config.json [--mock] [--port 8787] [--base-url url]
+  agentify serve   --config merchant.config.json [--mock] [--port 8787] [--base-url url] [--payment razorpay]
 
 OPTIONS
-  --config <file>   path to a merchant REST adapter config (JSON)
-  --mock            use the built-in demo merchant instead of --config
-  --out <dir>       output directory for generated static files (default agentify-static)
-  --base-url <url>  public origin used in llms.txt/agents.md/ucp (default http://localhost:8787)
-  --port <n>        serve port (default 8787)
+  --config <file>    path to a merchant REST adapter config (JSON)
+  --mock             use the built-in demo merchant instead of --config
+  --out <dir>        output directory for generated static files (default agentify-static)
+  --base-url <url>   public origin used in llms.txt/agents.md/ucp (default http://localhost:8787)
+  --port <n>         serve port (default 8787)
+  --payment <name>   enable payment (razorpay) using RAZORPAY_KEY_ID/KEY_SECRET env
 `);
 }
 

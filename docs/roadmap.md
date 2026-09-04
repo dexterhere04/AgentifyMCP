@@ -10,7 +10,7 @@ Status of the architecture doc's MVP plan.
 | — | Cart + checkout foundation (approval-gated), `get_order` | ✅ |
 | — | `meta.ucp-agent` negotiation | ✅ |
 | 3 | Config-driven REST adapter + second merchant | ✅ |
-| 7 | Razorpay test-mode payment (webhook-verified) + audit | ✅ |
+| 7 | Razorpay test-mode payment (webhook-verified + polling) + audit | ✅ |
 | 4 | OpenAPI-assisted integration | 🔜 |
 | 5 | Catalog index + semantic search | 🔜 |
 | 6 | Full checkout fidelity (shipping/coupon, state machine polish) | 🔜 |

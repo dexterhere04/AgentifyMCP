@@ -1,6 +1,7 @@
 import {
   moneyEquals,
   type CommerceProvider,
+  type Money,
   type Order,
   type PaymentConfirmedEvent,
   type PaymentGateway,
@@ -17,6 +18,8 @@ export class PaymentError extends Error {
       | "CURRENCY_MISMATCH"
       | "NOT_FOUND"
       | "PAYMENT_NOT_PAID"
+      | "PAYMENT_NOT_READY"
+      | "UNSUPPORTED"
       | "ALREADY_PROCESSED"
       | "CHECKOUT_NOT_PAYABLE",
     message: string,
@@ -31,17 +34,25 @@ export interface StartPaymentContext {
   agent?: string;
 }
 
+interface PaymentConfirmation {
+  /** Payment id when known (webhook); unknown when reconciling by polling. */
+  paymentId?: string;
+  amount: Money;
+}
+
 /**
  * Payment orchestration: start a payment against a checkout via a PaymentGateway
- * and reconcile the provider's webhook callback into a merchant order.
+ * and reconcile a confirmation (webhook OR polling) into a merchant order.
  *
  * The orchestrator never talks to a PSP-specific schema: it drives the generic
- * PaymentGateway and the merchant CommerceProvider. Idempotency is enforced per
- * payment id so duplicate callbacks never double-complete a checkout.
+ * PaymentGateway and the merchant CommerceProvider. Finalization is idempotent
+ * across both reconcile paths (webhook + polling) so a checkout can never be
+ * completed twice.
  */
 export class PaymentOrchestrator {
   private readonly intents = new Map<string, PaymentIntent>();
   private readonly processedPayments = new Map<string, string>(); // paymentId -> orderId
+  private readonly finalizedCheckouts = new Map<string, Order>(); // checkoutId -> order
 
   constructor(
     private readonly provider: CommerceProvider,
@@ -119,7 +130,7 @@ export class PaymentOrchestrator {
   /**
    * Reconcile a provider webhook. Verifies the signature, parses the event,
    * matches the amount/currency of the intent and finalizes the merchant order
-   * (idempotent per payment id).
+   * (idempotent per checkout + payment id).
    */
   async handleWebhook(rawBody: string, signature: string | null): Promise<Order> {
     if (!signature || !this.gateway.verifyWebhookSignature(rawBody, signature)) {
@@ -150,12 +161,9 @@ export class PaymentOrchestrator {
       throw new PaymentError("NOT_FOUND", `no pending payment for checkout "${event.referenceId}"`);
     }
 
-    // idempotency: a payment we already reconciled returns its order
-    const existingOrderId = this.processedPayments.get(event.paymentId);
-    if (existingOrderId && this.provider.orders) {
-      const existing = await this.provider.orders.get(existingOrderId);
-      return existing;
-    }
+    // idempotency across duplicate webhooks / already-polled checkouts
+    const already = await this.existingOrderFor(intent.checkoutId, event.paymentId);
+    if (already) return already;
 
     if (event.status !== "paid") {
       this.audit.record({
@@ -169,45 +177,119 @@ export class PaymentOrchestrator {
       throw new PaymentError("PAYMENT_NOT_PAID", `payment event status is "${event.status}"`);
     }
 
-    if (!moneyEquals(event.amount, intent.amount)) {
+    this.assertAmountMatches(event.amount, intent.amount, intent.checkoutId, event.paymentId);
+
+    return this.finalize(intent.checkoutId, { paymentId: event.paymentId, amount: event.amount });
+  }
+
+  /**
+   * Reconcile by polling the payment order's live status (no webhook needed).
+   * Returns the finalized order when the payment is confirmed, or throws
+   * PAYMENT_NOT_READY while the buyer has not paid yet — callers should retry.
+   */
+  async reconcileByPolling(checkoutId: string): Promise<Order> {
+    const intent = this.intents.get(checkoutId);
+    if (!intent) {
+      throw new PaymentError("NOT_FOUND", `no pending payment for checkout "${checkoutId}"`);
+    }
+    const existing = this.finalizedCheckouts.get(checkoutId);
+    if (existing) return existing;
+
+    if (!this.gateway.getOrderStatus) {
+      throw new PaymentError(
+        "UNSUPPORTED",
+        `gateway "${this.gateway.id}" does not support polling reconciliation`,
+      );
+    }
+    const status = await this.gateway.getOrderStatus(intent.paymentOrderId);
+    if (status.status !== "paid") {
+      throw new PaymentError("PAYMENT_NOT_READY", `payment order is "${status.status}"`);
+    }
+    if (status.amountPaid !== undefined && status.amountPaid !== intent.amount.amount) {
       this.audit.record({
         event: "checkout.payment.amount_mismatch",
         merchant_id: this.merchantId,
-        checkout_id: event.referenceId,
-        payment_id: event.paymentId,
-        amount: event.amount.amount,
-        currency: event.amount.currency,
+        checkout_id: checkoutId,
+        amount: status.amountPaid,
+        currency: intent.amount.currency,
         details: { expected_amount: intent.amount.amount },
       });
       throw new PaymentError(
         "AMOUNT_MISMATCH",
-        `payment amount ${event.amount.amount} ${event.amount.currency} does not match expected ${intent.amount.amount} ${intent.amount.currency}`,
+        `paid ${status.amountPaid} ${intent.amount.currency} does not match expected ${intent.amount.amount}`,
       );
     }
+
+    return this.finalize(checkoutId, { amount: intent.amount });
+  }
+
+  private async existingOrderFor(checkoutId: string, paymentId?: string): Promise<Order | undefined> {
+    const finalized = this.finalizedCheckouts.get(checkoutId);
+    if (finalized) return finalized;
+    if (paymentId) {
+      const orderId = this.processedPayments.get(paymentId);
+      if (orderId) {
+        const order = this.finalizedCheckouts.get(checkoutId);
+        if (order) return order;
+        if (this.provider.orders) {
+          try {
+            return await this.provider.orders.get(orderId);
+          } catch {
+            // fall through to re-finalize
+          }
+        }
+      }
+    }
+    return undefined;
+  }
+
+  private assertAmountMatches(actual: Money, expected: Money, checkoutId: string, paymentId?: string): void {
+    if (moneyEquals(actual, expected)) return;
+    this.audit.record({
+      event: "checkout.payment.amount_mismatch",
+      merchant_id: this.merchantId,
+      checkout_id: checkoutId,
+      payment_id: paymentId,
+      amount: actual.amount,
+      currency: actual.currency,
+      details: { expected_amount: expected.amount },
+    });
+    throw new PaymentError(
+      "AMOUNT_MISMATCH",
+      `payment amount ${actual.amount} ${actual.currency} does not match expected ${expected.amount} ${expected.currency}`,
+    );
+  }
+
+  /** Complete the merchant checkout for a confirmed payment, idempotently. */
+  private async finalize(checkoutId: string, confirmation: PaymentConfirmation): Promise<Order> {
+    const existing = this.finalizedCheckouts.get(checkoutId);
+    if (existing) return existing;
 
     this.audit.record({
       event: "checkout.payment.received",
       merchant_id: this.merchantId,
-      checkout_id: event.referenceId,
-      payment_id: event.paymentId,
-      agent: undefined,
-      amount: event.amount.amount,
-      currency: event.amount.currency,
+      checkout_id: checkoutId,
+      payment_id: confirmation.paymentId,
+      amount: confirmation.amount.amount,
+      currency: confirmation.amount.currency,
       approval: { required: true, received: true },
     });
 
-    const order = await this.provider.checkout!.complete(event.referenceId, {
+    const order = await this.provider.checkout!.complete(checkoutId, {
       approval: { buyerApproved: true },
     });
-    this.processedPayments.set(event.paymentId, order.id);
+    this.finalizedCheckouts.set(checkoutId, order);
+    if (confirmation.paymentId) {
+      this.processedPayments.set(confirmation.paymentId, order.id);
+    }
     this.audit.record({
       event: "checkout.completed",
       merchant_id: this.merchantId,
-      checkout_id: event.referenceId,
+      checkout_id: checkoutId,
       order_id: order.id,
-      payment_id: event.paymentId,
-      amount: event.amount.amount,
-      currency: event.amount.currency,
+      payment_id: confirmation.paymentId,
+      amount: confirmation.amount.amount,
+      currency: confirmation.amount.currency,
       approval: { required: true, received: true },
     });
     return order;

@@ -74,6 +74,9 @@ importers:
       '@agentify/payments':
         specifier: workspace:*
         version: link:../../packages/payments
+      '@agentify/payments-razorpay':
+        specifier: workspace:*
+        version: link:../../packages/payments-razorpay
       '@agentify/ucp':
         specifier: workspace:*
         version: link:../../packages/ucp
@@ -119,6 +122,9 @@ importers:
       '@agentify/metadata':
         specifier: workspace:*
         version: link:../metadata
+      '@agentify/payments-razorpay':
+        specifier: workspace:*
+        version: link:../payments-razorpay
       '@agentify/ucp':
         specifier: workspace:*
         version: link:../ucp

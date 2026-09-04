@@ -8,6 +8,7 @@ import {
   type PaymentLinkRequest,
   type PaymentOrder,
   type PaymentOrderRequest,
+  type PaymentOrderStatus,
 } from "@agentify/canonical-commerce";
 import type { RazorpayConfig, RazorpayWebhookPayload } from "./config.js";
 
@@ -78,6 +79,15 @@ export class RazorpayGateway implements PaymentGateway {
     return Razorpay.validateWebhookSignature(rawBody, signature, this.webhookSecret);
   }
 
+  /** Live payment-order status for polling reconciliation (no webhook needed). */
+  async getOrderStatus(orderId: string): Promise<PaymentOrderStatus> {
+    const order = await this.client.orders.fetch(orderId);
+    return {
+      status: order.status ?? "created",
+      amountPaid: Number(order.amount_paid ?? 0),
+    };
+  }
+
   parseWebhookEvent(payload: unknown): PaymentConfirmedEvent | null {
     const p = payload as RazorpayWebhookPayload;
     const event = p?.event;
@@ -115,4 +125,25 @@ function razorpayStatusToEvent(status: string): PaymentEventStatus {
 /** Compute the Razorpay webhook signature for a raw body (HMAC-SHA256). */
 export function razorpaySignature(rawBody: string, webhookSecret: string): string {
   return createHmac("sha256", webhookSecret).update(rawBody, "utf8").digest("hex");
+}
+
+/**
+ * Build a real Razorpay gateway from environment variables. Returns undefined
+ * when no keys are configured (callers can fall back to a non-payment build).
+ *
+ *   RAZORPAY_KEY_ID         rzp_test_...
+ *   RAZORPAY_KEY_SECRET     ...
+ *   RAZORPAY_WEBHOOK_SECRET ...  (for webhook reconciliation)
+ *   RAZORPAY_MODE           test | live   (default test; live requires allowLive)
+ */
+export function razorpayGatewayFromEnv(env: NodeJS.ProcessEnv = process.env): RazorpayGateway | undefined {
+  const keyId = env.RAZORPAY_KEY_ID;
+  const keySecret = env.RAZORPAY_KEY_SECRET;
+  if (!keyId && !keySecret) return undefined;
+  if (!keyId || !keySecret) {
+    throw new Error("set both RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to enable Razorpay");
+  }
+  const webhookSecret = env.RAZORPAY_WEBHOOK_SECRET ?? "";
+  const mode = (env.RAZORPAY_MODE ?? "test") as RazorpayConfig["mode"];
+  return new RazorpayGateway({ keyId, keySecret, webhookSecret, mode });
 }
