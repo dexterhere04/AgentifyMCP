@@ -67,8 +67,11 @@ export interface AuditRow {
   checkout_id?: string;
   cart_id?: string;
   order_id?: string;
+  payment_id?: string;
+  agent?: string;
   approval?: { required: boolean; granted?: boolean; received?: boolean };
   explanation?: string;
+  details?: Record<string, unknown>;
 }
 
 export interface TestResult {

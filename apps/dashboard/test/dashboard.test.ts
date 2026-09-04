@@ -1,10 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { createDashboardApp } from "../src/api/app.js";
+
+function findRepoRoot(from: string): string {
+  let dir = from;
+  for (let i = 0; i < 8; i++) {
+    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
+    dir = dirname(dir);
+  }
+  throw new Error("repo root not found");
+}
+
+const REPO = findRepoRoot(process.cwd());
 
 let dir: string;
 let app: Hono;
@@ -27,7 +38,7 @@ function sleep(ms: number): Promise<void> {
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "dash-"));
   app = createDashboardApp({
-    repoRoot: process.cwd(),
+    repoRoot: REPO,
     dataDir: join(dir, "merchants"),
     auditDbPath: join(dir, "audit.db"),
   });
