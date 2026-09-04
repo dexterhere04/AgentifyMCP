@@ -21,6 +21,8 @@ export interface MetadataEndpointConfig {
   baseUrl: string;
   /** Path to the MCP endpoint. */
   mcpPath?: string;
+  /** Path to the UCP discovery endpoint. */
+  ucpPath?: string;
   /** Currencies/countries restrictions when known. */
   supportedCountries?: string[];
   /** Optional rate limit note. */
@@ -51,10 +53,26 @@ function url(base: string, path: string): string {
   return `${base.replace(/\/+$/, "")}${path}`;
 }
 
+function mcpToolNames(capabilities: CapabilityName[]): string {
+  const has = (name: CapabilityName) => capabilities.includes(name);
+  const tools: string[] = [];
+  tools.push("search_catalog", "get_product", "get_variant");
+  if (has("inventory")) tools.push("check_availability");
+  if (has("pricing")) tools.push("get_offer");
+  if (has("cart")) {
+    tools.push("create_cart", "get_cart", "add_to_cart", "update_cart_item", "remove_from_cart");
+  }
+  if (has("checkout")) {
+    tools.push("create_checkout", "get_checkout", "complete_checkout", "cancel_checkout");
+  }
+  return tools.join(", ");
+}
+
 export function agentsMarkdown(ctx: MetadataContext): string {
   const { merchant, capabilities, config } = ctx;
   const base = config.baseUrl.replace(/\/+$/, "");
   const mcpUrl = url(base, config.mcpPath ?? "/mcp");
+  const ucpUrl = url(base, config.ucpPath ?? "/.well-known/ucp");
   const c = capabilities;
   const supports = capabilitySummary({ catalog: true, inventory: true, pricing: true, cart: c.includes("cart"), checkout: c.includes("checkout"), orders: c.includes("orders") });
 
@@ -77,6 +95,7 @@ export function agentsMarkdown(ctx: MetadataContext): string {
   lines.push("## Discovery endpoints");
   lines.push("");
   lines.push(`- MCP endpoint: \`${mcpUrl}\` (Streamable HTTP, JSON-RPC 2.0)`);
+  lines.push(`- UCP discovery profile: \`${ucpUrl}\` (capabilities + transports)`);
   lines.push(`- \`agents.md\`: ${url(base, "/agents.md")}`);
   lines.push(`- \`llms.txt\`: ${url(base, "/llms.txt")}`);
   lines.push("");
@@ -84,10 +103,24 @@ export function agentsMarkdown(ctx: MetadataContext): string {
   lines.push("");
   lines.push("This merchant currently supports the following actions. Do not attempt actions outside this list.");
   for (const item of supports) lines.push(`- ${item}`);
-  if (!capabilities.includes("checkout")) {
+  const hasCart = capabilities.includes("cart");
+  const hasCheckout = capabilities.includes("checkout");
+  const hasOrders = capabilities.includes("orders");
+  if (!hasCart && !hasCheckout) {
     lines.push("");
-    lines.push("> This merchant is catalog-queryable only. **No cart, checkout, or payment is possible.**");
+    lines.push("> This merchant is catalog-queryable only. **No cart or checkout is possible.**");
     lines.push("> Never ask the buyer for payment information.");
+  } else if (hasCheckout) {
+    lines.push("");
+    lines.push("> Checkout is available but **simulated** in this environment: it creates an order without a live payment.");
+    lines.push("> Completing a checkout **requires explicit, contemporaneous human approval** (`approval.buyerApproved = true`). Never complete a checkout without it.");
+    if (!hasOrders) {
+      lines.push("> Order history/lookup is not available yet; keep the order id returned by checkout completion.");
+    }
+    lines.push("> Transactional tools require `meta.ucp-agent.profile` (your agent's UCP profile URI).");
+  } else {
+    lines.push("");
+    lines.push("> Cart is available, but **checkout is not yet supported**. Stop after cart preparation.");
   }
   lines.push("");
   lines.push("## Money and pricing rules");
@@ -125,10 +158,12 @@ export function agentsMarkdown(ctx: MetadataContext): string {
 }
 
 export function llmsTxt(ctx: MetadataContext): string {
-  const { merchant, config } = ctx;
+  const { merchant, config, capabilities } = ctx;
   const base = config.baseUrl.replace(/\/+$/, "");
   const mcpUrl = url(base, config.mcpPath ?? "/mcp");
+  const ucpUrl = url(base, config.ucpPath ?? "/.well-known/ucp");
 
+  const toolList = mcpToolNames(capabilities);
   const out: string[] = [];
   out.push(`# ${merchant.name}`);
   out.push("");
@@ -138,8 +173,9 @@ export function llmsTxt(ctx: MetadataContext): string {
   out.push("");
   out.push("## Agent interfaces");
   out.push("");
+  out.push(`- [UCP discovery profile](${ucpUrl}): Machine-readable capability + transport discovery (Universal Commerce Protocol)`);
   out.push(`- [agents.md](${url(base, "/agents.md")}): Behavioural instructions for AI agents shopping this store`);
-  out.push(`- [MCP endpoint](${mcpUrl}): Post JSON-RPC 2.0 (Streamable HTTP). initialize → tools/list → tools/call. Tools: search_catalog, get_product, get_variant, check_availability, get_offer`);
+  out.push(`- [MCP endpoint](${mcpUrl}): Post JSON-RPC 2.0 (Streamable HTTP). initialize → tools/list → tools/call. Tools: ${toolList}. Transactional tools require meta.ucp-agent.profile.`);
   out.push(`- [Store home](${merchant.url ?? base}): Human-facing storefront`);
   out.push("");
   out.push("## Policies and support");

@@ -27,8 +27,19 @@ describe("metadata generators", () => {
     expect(text).toContain("# Aarna Jewels — Agent Instructions");
     expect(text).toContain("Default currency: `INR`");
     expect(text).toContain("catalog (search + lookup)");
-    // No cart/checkout tools are listed as supported actions
-    expect(text).toContain("No cart, checkout, or payment is possible.");
+    // Cart + checkout are supported; checkout is simulated and needs approval.
+    expect(text).toContain("- cart");
+    expect(text).toContain("- checkout");
+    expect(text).toContain("Checkout is available but **simulated** in this environment");
+    expect(text).toContain("requires explicit, contemporaneous human approval");
+    expect(text).toContain("Transactional tools require `meta.ucp-agent.profile`");
+  });
+
+  it("llms.txt advertises cart and checkout tools when supported", async () => {
+    const md = await createMetadata(provider, config);
+    const txt = md.llmsTxt();
+    expect(txt).toContain("create_cart, get_cart, add_to_cart, update_cart_item, remove_from_cart");
+    expect(txt).toContain("create_checkout, get_checkout, complete_checkout, cancel_checkout");
   });
 
   it("includes policies and failure expectations", async () => {
