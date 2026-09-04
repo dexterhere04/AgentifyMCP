@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMockCommerceProvider } from "@agentify/adapter-mock";
-import { createMetadata } from "../src/index.js";
+import { createMetadata, DEFAULT_SKILL_URL } from "../src/index.js";
 
 const config = {
   baseUrl: "https://demo.example",
@@ -19,6 +19,26 @@ describe("metadata generators", () => {
     expect(txt).toContain("[agents.md](https://demo.example/agents.md)");
     expect(txt).toContain("[MCP endpoint](https://demo.example/mcp)");
     expect(txt).toContain("## Optional");
+  });
+
+  it("recommends the shopping skill in agents.md and llms.txt by default", async () => {
+    const md = await createMetadata(provider, config);
+    const agents = md.agentsMarkdown();
+    expect(agents).toContain("## Recommended skill");
+    expect(agents).toContain(`[Agentify shopping skill](${DEFAULT_SKILL_URL})`);
+    const llms = md.llmsTxt();
+    expect(llms).toContain(`[Shopping skill](${DEFAULT_SKILL_URL})`);
+  });
+
+  it("omits the skill when recommendSkill is false", async () => {
+    const md = await createMetadata(provider, { ...config, recommendSkill: false });
+    expect(md.agentsMarkdown()).not.toContain("Recommended skill");
+    expect(md.llmsTxt()).not.toContain("Shopping skill");
+  });
+
+  it("honors a custom skillUrl", async () => {
+    const md = await createMetadata(provider, { ...config, skillUrl: "https://skills.example/SKILL.md" });
+    expect(md.agentsMarkdown()).toContain("[Agentify shopping skill](https://skills.example/SKILL.md)");
   });
 
   it("advertises only supported actions in agents.md", async () => {

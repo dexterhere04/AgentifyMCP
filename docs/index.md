@@ -27,7 +27,7 @@ surface (UCP profile, MCP tools, `agents.md`, `llms.txt`) via the merchant's
 |------|------|
 | Concepts | [Canonical model](concepts/canonical-model.md) · [Provider contract](concepts/provider-contract.md) · [Capability graph](concepts/capability-graph.md) |
 | Integrations | [Matrix](integrations/matrix.md) · [REST config](integrations/rest-adapter.md) · [SDK](integrations/sdk-adapter.md) · [Middleware](integrations/middleware.md) |
-| Protocols | [UCP](protocols/ucp.md) · [MCP tools](protocols/mcp-tools.md) |
+| Protocols | [UCP](protocols/ucp.md) · [MCP tools](protocols/mcp-tools.md) · [Shopping skill](protocols/agent-skill.md) |
 | Payments | [Razorpay](payments/razorpay.md) |
 | Deploy | [Server](deploy/server.md) · [Multi-tenant](deploy/multi-tenant.md) |
 | Cross-cutting | [Security](security.md) · [Testing](testing.md) |

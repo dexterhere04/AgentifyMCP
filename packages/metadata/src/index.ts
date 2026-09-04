@@ -27,7 +27,14 @@ export interface MetadataEndpointConfig {
   supportedCountries?: string[];
   /** Optional rate limit note. */
   rateLimitNote?: string;
+  /** URL of the reusable shopping skill playbook agents can read/install. */
+  skillUrl?: string;
+  /** When true, agents.md/llms.txt recommend the shopping skill. Default true. */
+  recommendSkill?: boolean;
 }
+
+/** Canonical Agentify shopping-skill URL (hosted via GitHub Pages). */
+export const DEFAULT_SKILL_URL = "https://dexterhere04.github.io/AgentifyMCP/SKILL.md";
 
 export interface GeneratedMetadata {
   agentsMarkdown(): string;
@@ -97,10 +104,17 @@ export function agentsMarkdown(ctx: MetadataContext): string {
   lines.push("");
   lines.push("## Discovery endpoints");
   lines.push("");
-  lines.push(`- MCP endpoint: \`${mcpUrl}\` (Streamable HTTP, JSON-RPC 2.0)`);
+  lines.push("- MCP endpoint: \`${mcpUrl}\` (Streamable HTTP, JSON-RPC 2.0)");
   lines.push(`- UCP discovery profile: \`${ucpUrl}\` (capabilities + transports)`);
   lines.push(`- \`agents.md\`: ${url(base, "/agents.md")}`);
   lines.push(`- \`llms.txt\`: ${url(base, "/llms.txt")}`);
+  if (config.recommendSkill !== false) {
+    const skillUrl = config.skillUrl ?? DEFAULT_SKILL_URL;
+    lines.push("");
+    lines.push("## Recommended skill");
+    lines.push("");
+    lines.push(`- [Agentify shopping skill](${skillUrl}): a reusable playbook for shopping this and every Agentify-powered store. Read/install it before shopping — it covers discovery, negotiation (\`meta.ucp-agent\`), live offer verification, approval-gated checkout, payment handoff, order tracking and failure handling.`);
+  }
   lines.push("");
   lines.push("## Supported actions");
   lines.push("");
@@ -178,6 +192,9 @@ export function llmsTxt(ctx: MetadataContext): string {
   out.push("");
   out.push(`- [UCP discovery profile](${ucpUrl}): Machine-readable capability + transport discovery (Universal Commerce Protocol)`);
   out.push(`- [agents.md](${url(base, "/agents.md")}): Behavioural instructions for AI agents shopping this store`);
+  if (config.recommendSkill !== false) {
+    out.push(`- [Shopping skill](${config.skillUrl ?? DEFAULT_SKILL_URL}): Reusable agent playbook for shopping this and every Agentify-powered store`);
+  }
   out.push(`- [MCP endpoint](${mcpUrl}): Post JSON-RPC 2.0 (Streamable HTTP). initialize → tools/list → tools/call. Tools: ${toolList}. Transactional tools require meta.ucp-agent.profile.`);
   out.push(`- [Store home](${merchant.url ?? base}): Human-facing storefront`);
   out.push("");

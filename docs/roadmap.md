@@ -11,6 +11,7 @@ Status of the architecture doc's MVP plan.
 | — | `meta.ucp-agent` negotiation | ✅ |
 | 3 | Config-driven REST adapter + second merchant | ✅ |
 | 7 | Razorpay test-mode payment (webhook-verified + polling) + audit | ✅ |
+| — | §6.5 Optional SKILL.md — reusable agent-side shopping playbook | ✅ |
 | 4 | OpenAPI-assisted integration | 🔜 |
 | 5 | Catalog index + semantic search | 🔜 |
 | 6 | Full checkout fidelity (shipping/coupon, state machine polish) | 🔜 |
@@ -26,6 +27,7 @@ Status of the architecture doc's MVP plan.
 - ✅ REST adapter config JSON Schema
 - ✅ GitHub Actions CI + changesets release flow
 - ✅ `/docs` (this tree) + TypeDoc entry
+- ✅ Agent-side shopping skill (`docs/SKILL.md`, advertised in `agents.md`/`llms.txt`)
 - 🔜 Un-private + publish packages to npm (requires npm credentials)
 - 🔜 OpenAPI adapter (MVP 4)
 

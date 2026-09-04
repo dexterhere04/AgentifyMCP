@@ -19,6 +19,11 @@ discovers the merchant via `/.well-known/ucp`, lists MCP tools, searches,
 prices, carts, checks out and (with buyer approval) completes an order —
 verifying live stock and price at every step.
 
+General-purpose agents can also use the reusable
+[shopping skill](../SKILL.md) instead of per-store prompting — install it once
+and shop any Agentify-powered store (see
+[protocols/agent-skill.md](../protocols/agent-skill.md)).
+
 ## What a demo prints
 
 ```
