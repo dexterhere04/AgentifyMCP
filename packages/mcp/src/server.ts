@@ -32,8 +32,64 @@ function moneyText(amount: number | undefined, currency: string): string {
   return `${(amount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 }
 
+const CART_TOOLS = new Set([
+  "create_cart",
+  "get_cart",
+  "add_to_cart",
+  "update_cart_item",
+  "remove_from_cart",
+]);
+const CHECKOUT_TOOLS = new Set(["create_checkout", "get_checkout", "cancel_checkout"]);
+
+function renderCart(data: unknown): string {
+  const cart = data as {
+    id: string;
+    status: string;
+    currency: string;
+    items: Array<{ id: string; variantId: string; title: string; quantity: number; unitPrice: { amount: number; currency: string } }>;
+    subtotal: { amount: number; currency: string };
+  };
+  const lines = cart.items.map(
+    (item) =>
+      `  ${item.id} · ${item.quantity} × ${item.title} @ ${moneyText(item.unitPrice.amount, item.unitPrice.currency)}`,
+  );
+  return `cart ${cart.id} [${cart.status}]\n` +
+    (lines.join("\n") || "  (empty)") +
+    `\n  subtotal: ${moneyText(cart.subtotal.amount, cart.subtotal.currency)}`;
+}
+
+function renderCheckout(data: unknown): string {
+  const checkout = data as {
+    id: string;
+    status: string;
+    currency: string;
+    totals?: { subtotal?: { amount: number; currency: string }; total?: { amount: number; currency: string } };
+    orderId?: string;
+  };
+  const total = checkout.totals?.total
+    ? ` total=${moneyText(checkout.totals.total.amount, checkout.totals.total.currency)}`
+    : "";
+  return `checkout ${checkout.id} [${checkout.status}]${total}${checkout.orderId ? ` orderId=${checkout.orderId}` : ""}`;
+}
+
+function renderOrder(data: unknown): string {
+  const order = data as {
+    id: string;
+    checkoutId?: string;
+    currency: string;
+    status: string;
+    total?: { amount: number; currency: string };
+    createdAt: string;
+  };
+  return `order ${order.id} [${order.status}]${order.checkoutId ? ` checkoutId=${order.checkoutId}` : ""}${order.total ? ` total=${moneyText(order.total.amount, order.total.currency)}` : ""}`;
+}
+
+
 /** Render a tool result as human-readable text (structured data is also returned). */
 function renderText(tool: string, data: unknown): string {
+  if (CART_TOOLS.has(tool)) return renderCart(data);
+  if (CHECKOUT_TOOLS.has(tool)) return renderCheckout(data);
+  if (tool === "complete_checkout") return renderOrder(data);
   if (tool === "search_catalog") {
     const r = data as {
       items: Array<{
@@ -123,10 +179,14 @@ export function toolSpecsToSdkTools(specs: ToolSpec[]): Tool[] {
 
 function toCallResult(tool: string, outcome: ToolCallResult<unknown>): CallToolResult {
   if (!isToolFailure(outcome)) {
-    return {
+    const result: Record<string, unknown> = {
       content: [{ type: "text", text: renderText(tool, outcome.data) }],
       structuredContent: outcome.data as unknown as Record<string, unknown>,
-    } as unknown as CallToolResult;
+    };
+    if (outcome.agentProfile) {
+      result._meta = { "ucp-agent": { profile: outcome.agentProfile } };
+    }
+    return result as unknown as CallToolResult;
   }
   const { error } = outcome;
   return {

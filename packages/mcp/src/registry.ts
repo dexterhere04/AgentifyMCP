@@ -7,7 +7,7 @@ import {
   type OfferInput,
   isProviderError,
 } from "@gateway/canonical-commerce";
-import { ToolArgSchemas, type ToolName } from "./tools/schemas.js";
+import { ToolArgSchemas, agentProfileOf, type ToolName } from "./tools/schemas.js";
 
 /** Tool-side error mirroring canonical provider semantics over MCP. */
 export class ToolError extends Error {
@@ -36,6 +36,8 @@ export interface ToolSpec {
 export interface ToolCallSuccess<T> {
   ok: true;
   data: T;
+  /** Calling agent's UCP profile (from meta.ucp-agent.profile), when provided. */
+  agentProfile?: string;
 }
 
 export interface ToolCallFailure {
@@ -45,10 +47,11 @@ export interface ToolCallFailure {
 
 export type ToolCallResult<T> = ToolCallSuccess<T> | ToolCallFailure;
 
-const CATALOG_TOOLS: Record<
+const TOOLS: Record<
   ToolName,
   { description: string; enabled: (caps: Capabilities) => boolean }
 > = {
+  // catalog (read-only, always when catalog exists)
   search_catalog: {
     description:
       "Search the merchant catalog with a free-text query and structured filters (price, brand, material, occasion, stock). Live data. Prices are in minor units; e.g. 500000 INR paise = Rs 5000.",
@@ -74,12 +77,56 @@ const CATALOG_TOOLS: Record<
       "Get the live, discounted offer for a product or variant: effective price after sale/automatic discounts, list price, savings, and availability. Verify offers right before recommending or transacting.",
     enabled: (caps) => caps.pricing,
   },
+  // cart (transactional)
+  create_cart: {
+    description:
+      "Create an empty cart for the merchant currency. Requires meta.ucp-agent.profile (your agent UCP profile URI).",
+    enabled: (caps) => caps.cart,
+  },
+  get_cart: {
+    description: "Retrieve a cart by id with its live-priced line items and subtotal.",
+    enabled: (caps) => caps.cart,
+  },
+  add_to_cart: {
+    description:
+      "Add a variant quantity to a cart. Prices are taken from the live offer and stock is checked before adding. Requires meta.ucp-agent.profile.",
+    enabled: (caps) => caps.cart,
+  },
+  update_cart_item: {
+    description: "Update the quantity of an existing cart line item.",
+    enabled: (caps) => caps.cart,
+  },
+  remove_from_cart: {
+    description: "Remove a line item from a cart.",
+    enabled: (caps) => caps.cart,
+  },
+  // checkout (transactional)
+  create_checkout: {
+    description:
+      "Start a checkout from an active, non-empty cart. Requires meta.ucp-agent.profile.",
+    enabled: (caps) => caps.checkout,
+  },
+  get_checkout: {
+    description: "Retrieve a checkout by id, including totals and status.",
+    enabled: (caps) => caps.checkout,
+  },
+  complete_checkout: {
+    description:
+      "Complete a checkout. REQUIRES explicit human approval (approval.buyerApproved = true) and meta.ucp-agent.profile. Creates an order; no live payment is processed in this environment.",
+    enabled: (caps) => caps.checkout,
+  },
+  cancel_checkout: {
+    description: "Cancel a checkout that has not been completed.",
+    enabled: (caps) => caps.checkout,
+  },
 };
 
 /**
  * A capability-aware tool registry bound to one provider. `list()` returns only
  * the tools the merchant actually supports; `call()` validates input and maps
- * to canonical CommerceProvider methods.
+ * to canonical CommerceProvider methods. Transactional tools require the
+ * caller's `meta.ucp-agent.profile`, which is threaded into provider calls and
+ * echoed back in the result `_meta` for negotiation/audit.
  */
 export class CommerceToolRegistry {
   private readonly caps: Capabilities;
@@ -95,18 +142,18 @@ export class CommerceToolRegistry {
   }
 
   list(): Array<{ name: ToolName; description: string; inputSchema: z.ZodTypeAny }> {
-    return (Object.keys(CATALOG_TOOLS) as ToolName[])
-      .filter((name) => CATALOG_TOOLS[name].enabled(this.caps))
+    return (Object.keys(TOOLS) as ToolName[])
+      .filter((name) => TOOLS[name].enabled(this.caps))
       .map((name) => ({
         name,
-        description: CATALOG_TOOLS[name].description,
+        description: TOOLS[name].description,
         inputSchema: ToolArgSchemas[name],
       }));
   }
 
   async call(name: string, rawArgs: unknown): Promise<ToolCallResult<unknown>> {
-    const def = CATALOG_TOOLS[name as ToolName];
-    if (!def || !(name in CATALOG_TOOLS)) {
+    const def = TOOLS[name as ToolName];
+    if (!def || !(name in TOOLS)) {
       return { ok: false, error: { code: "INVALID_ARGUMENT", message: `Unknown tool: ${name}` } };
     }
     const toolName = name as ToolName;
@@ -134,9 +181,15 @@ export class CommerceToolRegistry {
       };
     }
 
+    const agentProfile = agentProfileOf(
+      parsed.data as { meta?: { "ucp-agent"?: { profile?: string } } },
+    );
+
     try {
-      const data = await this.execute(toolName, parsed.data);
-      return { ok: true, data };
+      const data = await this.execute(toolName, parsed.data, agentProfile);
+      const success: ToolCallSuccess<unknown> = { ok: true, data };
+      if (agentProfile) success.agentProfile = agentProfile;
+      return success;
     } catch (err) {
       if (isProviderError(err)) {
         const code =
@@ -150,6 +203,9 @@ export class CommerceToolRegistry {
           error: { code, message: err.message, details: err.details },
         };
       }
+      if (err instanceof ToolError) {
+        return { ok: false, error: { code: err.code, message: err.message, details: err.details } };
+      }
       return {
         ok: false,
         error: { code: "INTERNAL", message: err instanceof Error ? err.message : "internal error" },
@@ -161,7 +217,11 @@ export class CommerceToolRegistry {
     return this.defaultCurrencyPromise;
   }
 
-  private async execute(name: ToolName, args: unknown): Promise<unknown> {
+  private async execute(
+    name: ToolName,
+    args: unknown,
+    agentProfile?: string,
+  ): Promise<unknown> {
     switch (name) {
       case "search_catalog": {
         const a = args as z.infer<typeof ToolArgSchemas.search_catalog>;
@@ -215,8 +275,75 @@ export class CommerceToolRegistry {
           ...(a.productId ? { productId: a.productId } : {}),
           ...(a.variantId ? { variantId: a.variantId } : {}),
           ...(a.currency ? { currency: a.currency.toUpperCase() } : {}),
+          ...(agentProfile ? { buyerContext: { ucpAgentProfile: agentProfile } } : {}),
         };
         return this.provider.pricing.getOffer(input);
+      }
+      case "create_cart": {
+        const a = args as z.infer<typeof ToolArgSchemas.create_cart>;
+        if (!this.provider.cart) throw new ToolError("UNSUPPORTED_CAPABILITY", "cart capability unavailable");
+        return this.provider.cart.create({ ...(a.currency ? { currency: a.currency } : {}), agentProfile });
+      }
+      case "get_cart": {
+        const a = args as z.infer<typeof ToolArgSchemas.get_cart>;
+        if (!this.provider.cart) throw new ToolError("UNSUPPORTED_CAPABILITY", "cart capability unavailable");
+        return this.provider.cart.get(a.cartId);
+      }
+      case "add_to_cart": {
+        const a = args as z.infer<typeof ToolArgSchemas.add_to_cart>;
+        if (!this.provider.cart) throw new ToolError("UNSUPPORTED_CAPABILITY", "cart capability unavailable");
+        return this.provider.cart.addItem({
+          cartId: a.cartId,
+          variantId: a.variantId,
+          quantity: a.quantity,
+          agentProfile,
+        });
+      }
+      case "update_cart_item": {
+        const a = args as z.infer<typeof ToolArgSchemas.update_cart_item>;
+        if (!this.provider.cart) throw new ToolError("UNSUPPORTED_CAPABILITY", "cart capability unavailable");
+        return this.provider.cart.updateItem({
+          cartId: a.cartId,
+          itemId: a.itemId,
+          quantity: a.quantity,
+          agentProfile,
+        });
+      }
+      case "remove_from_cart": {
+        const a = args as z.infer<typeof ToolArgSchemas.remove_from_cart>;
+        if (!this.provider.cart) throw new ToolError("UNSUPPORTED_CAPABILITY", "cart capability unavailable");
+        return this.provider.cart.removeItem({ cartId: a.cartId, itemId: a.itemId, agentProfile });
+      }
+      case "create_checkout": {
+        const a = args as z.infer<typeof ToolArgSchemas.create_checkout>;
+        if (!this.provider.checkout) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
+        }
+        return this.provider.checkout.create({ cartId: a.cartId, agentProfile });
+      }
+      case "get_checkout": {
+        const a = args as z.infer<typeof ToolArgSchemas.get_checkout>;
+        if (!this.provider.checkout) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
+        }
+        return this.provider.checkout.get(a.checkoutId);
+      }
+      case "complete_checkout": {
+        const a = args as z.infer<typeof ToolArgSchemas.complete_checkout>;
+        if (!this.provider.checkout) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
+        }
+        return this.provider.checkout.complete(a.checkoutId, {
+          approval: { buyerApproved: a.approval.buyerApproved },
+          agentProfile,
+        });
+      }
+      case "cancel_checkout": {
+        const a = args as z.infer<typeof ToolArgSchemas.cancel_checkout>;
+        if (!this.provider.checkout) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "checkout capability unavailable");
+        }
+        return this.provider.checkout.cancel(a.checkoutId, { agentProfile });
       }
     }
   }

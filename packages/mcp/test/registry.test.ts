@@ -3,19 +3,32 @@ import { createMockCommerceProvider } from "@gateway/adapter-mock";
 import { createCommerceMcpServer, toolSpecsToSdkTools, SERVER_NAME } from "../src/index.js";
 import { CommerceToolRegistry } from "../src/index.js";
 
+const AGENT = "https://agent.example/.well-known/ucp";
+
+const EXPECTED_FULL_LIST = [
+  "search_catalog",
+  "get_product",
+  "get_variant",
+  "check_availability",
+  "get_offer",
+  "create_cart",
+  "get_cart",
+  "add_to_cart",
+  "update_cart_item",
+  "remove_from_cart",
+  "create_checkout",
+  "get_checkout",
+  "complete_checkout",
+  "cancel_checkout",
+];
+
 describe("CommerceToolRegistry", () => {
   const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });
 
-  it("lists the tools a queryable merchant supports", async () => {
+  it("lists the tools a full merchant supports (catalog + cart + checkout)", async () => {
     const registry = new CommerceToolRegistry(provider);
     const tools = registry.list();
-    expect(tools.map((t) => t.name)).toEqual([
-      "search_catalog",
-      "get_product",
-      "get_variant",
-      "check_availability",
-      "get_offer",
-    ]);
+    expect(tools.map((t) => t.name)).toEqual(EXPECTED_FULL_LIST);
     for (const tool of tools) {
       expect(tool.description.length).toBeGreaterThan(0);
       expect(tool.inputSchema).toBeDefined();
@@ -28,6 +41,9 @@ describe("CommerceToolRegistry", () => {
     const search = sdkTools.find((t) => t.name === "search_catalog")!;
     expect(search.inputSchema.type).toBe("object");
     expect(Object.keys(search.inputSchema.properties ?? {})).toContain("query");
+    // transactional tools advertise the ucp-agent negotiation field
+    const add = sdkTools.find((t) => t.name === "add_to_cart")!;
+    expect((add.inputSchema.properties ?? {}).meta).toBeDefined();
   });
 
   it("searches and returns canonical data", async () => {
@@ -56,7 +72,7 @@ describe("CommerceToolRegistry", () => {
 
   it("rejects unknown tool names", async () => {
     const registry = new CommerceToolRegistry(provider);
-    const res = await registry.call("complete_checkout", {});
+    const res = await registry.call("get_order", {});
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("INVALID_ARGUMENT");
   });
@@ -67,6 +83,64 @@ describe("CommerceToolRegistry", () => {
     const res = await registry.call("get_product", { productId: "neck-anniversary" });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("BACKEND_ERROR");
+  });
+
+  it("requires meta.ucp-agent.profile on cart tools", async () => {
+    const registry = new CommerceToolRegistry(provider);
+    const res = await registry.call("create_cart", {});
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("INVALID_ARGUMENT");
+  });
+
+  it("runs a cart + checkout flow when meta.ucp-agent is supplied", async () => {
+    const registry = new CommerceToolRegistry(provider);
+    const meta = { "ucp-agent": { profile: AGENT } };
+
+    const created = await registry.call("create_cart", { meta });
+    expect(created.ok).toBe(true);
+    const cartId = created.ok ? (created.data as { id: string }).id : "";
+
+    const added = await registry.call("add_to_cart", {
+      meta,
+      cartId,
+      variantId: "neck-anniversary-18",
+      quantity: 2,
+    });
+    expect(added.ok).toBe(true);
+    if (added.ok) {
+      const data = added.data as { items: Array<{ quantity: number }>; subtotal: { amount: number } };
+      expect(data.items[0]!.quantity).toBe(2);
+      expect(data.subtotal.amount).toBe(2 * 399900);
+      expect(added.agentProfile).toBe(AGENT);
+    }
+
+    const chk = await registry.call("create_checkout", { meta, cartId });
+    expect(chk.ok).toBe(true);
+    const checkoutId = chk.ok ? (chk.data as { id: string }).id : "";
+
+    const completed = await registry.call("complete_checkout", {
+      meta,
+      checkoutId,
+      approval: { buyerApproved: true },
+    });
+    expect(completed.ok).toBe(true);
+    if (completed.ok) {
+      expect((completed.data as { status: string }).status).toBe("confirmed");
+      expect(completed.agentProfile).toBe(AGENT);
+    }
+  });
+
+  it("rejects completing a checkout without buyer approval", async () => {
+    const registry = new CommerceToolRegistry(provider);
+    const meta = { "ucp-agent": { profile: AGENT } };
+    const cart = await registry.call("create_cart", { meta });
+    const cartId = cart.ok ? (cart.data as { id: string }).id : "";
+    await registry.call("add_to_cart", { meta, cartId, variantId: "neck-anniversary-18", quantity: 1 });
+    const chk = await registry.call("create_checkout", { meta, cartId });
+    const checkoutId = chk.ok ? (chk.data as { id: string }).id : "";
+    const res = await registry.call("complete_checkout", { meta, checkoutId, approval: { buyerApproved: false } });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("INVALID_ARGUMENT");
   });
 });
 
