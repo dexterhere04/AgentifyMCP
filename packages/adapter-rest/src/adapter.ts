@@ -270,7 +270,7 @@ export type { RestAdapterConfig };
 export function validateRestConfig(config: RestAdapterConfig): string[] {
   const errors: string[] = [];
   if (!config.id) errors.push("id is required");
-  const merchant = config.merchant ?? {};
+  const merchant = (config.merchant ?? {}) as Partial<{ name: string; defaultCurrency: string }>;
   if (!merchant.name) errors.push("merchant.name is required");
   if (!/^[A-Za-z]{3}$/.test(merchant.defaultCurrency ?? "")) {
     errors.push("merchant.defaultCurrency must be a 3-letter code");
