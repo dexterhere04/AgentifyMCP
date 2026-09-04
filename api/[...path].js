@@ -19,6 +19,113 @@ const CAP_TOOLS = {
   orders: ["get_order"],
 };
 
+function auroraConfig() {
+  return {
+    id: "aurora-optics",
+    merchant: {
+      name: "Aurora Optics",
+      description: "Precision eyewear and optical instruments, sold direct. Agent-accessible catalog with live offers and stock.",
+      url: "https://aurora-optics.example",
+      country: "US",
+      defaultCurrency: "USD",
+    },
+    http: { baseUrl: "https://api.aurora-optics.example", timeoutMs: 3000 },
+    catalog: {
+      search: { path: "/products", query: { q: "{query}", page: "{page}", limit: "{limit}" }, itemsPath: "$.data", totalPath: "$.total", pageSize: 12 },
+      productUrl: "/products/{productId}",
+      variantUrl: "/variants/{variantId}",
+      offerUrl: "/offers?variant_id={variantId}",
+      stockUrl: "/variants/{variantId}/stock",
+    },
+    mappings: {
+      product: {
+        id: "$.id",
+        title: "$.title",
+        description: "$.description",
+        category: "$.category",
+        brand: "$.brand",
+        images: "$.images",
+        variants: {
+          path: "$.variants",
+          each: {
+            id: "$.id",
+            sku: "$.sku",
+            title: "$.name",
+            listPrice: { path: "$.price", unit: "major" },
+            salePrice: { path: "$.sale_price", unit: "major" },
+            availability: { path: "$.stock" },
+          },
+        },
+      },
+      offer: {
+        id: "$.id",
+        productId: "$.product_id",
+        sku: "$.sku",
+        title: "$.name",
+        productTitle: "$.product_title",
+        listPrice: { path: "$.price", unit: "major" },
+        salePrice: { path: "$.sale_price", unit: "major" },
+        availability: { path: "$.stock" },
+      },
+    },
+  };
+}
+
+function booksConfig() {
+  return {
+    id: "maple-main-books",
+    merchant: {
+      name: "Maple & Main Books",
+      description: "Indie bookshop. Catalog search and product lookup are live; cart and checkout are still being wired up.",
+      url: "https://maplemain.books.example",
+      country: "CA",
+      defaultCurrency: "CAD",
+    },
+    http: { baseUrl: "https://api.maplemain.books.example", timeoutMs: 3000 },
+    catalog: {
+      search: { path: "/books", query: { q: "{query}", page: "{page}", limit: "{limit}" }, itemsPath: "$.items", totalPath: "$.meta.total", pageSize: 20 },
+      productUrl: "/books/{productId}",
+      variantUrl: "/books/{productId}/editions/{variantId}",
+    },
+    mappings: {
+      product: {
+        id: "$.id",
+        title: "$.title",
+        description: "$.description",
+        category: "$.category",
+        brand: "$.publisher",
+        variants: {
+          path: "$.editions",
+          each: {
+            id: "$.id",
+            sku: "$.isbn",
+            title: "$.format",
+            listPrice: { path: "$.price", unit: "major" },
+            availability: { path: "$.stock" },
+          },
+        },
+      },
+    },
+  };
+}
+
+const DEMO_MERCHANTS = [
+  { id: "common-goods-rest", name: "Common Goods Co.", currency: "INR", state: "ready", tags: ["catalog", "offers", "stock"], description: "Basic ecommerce store served by the /testing REST backend. Fully configured end-to-end through the config-driven adapter." },
+  { id: "aurora-optics", name: "Aurora Optics", currency: "USD", state: "ready", tags: ["catalog", "offers", "stock"], description: "Precision eyewear and optical instruments, sold direct." },
+  { id: "maple-main-books", name: "Maple & Main Books", currency: "CAD", state: "draft", tags: ["catalog"], description: "Indie bookshop — catalog live, cart/checkout still being wired." },
+];
+
+function merchantEntry(id) {
+  return DEMO_MERCHANTS.find((m) => m.id === id);
+}
+
+function configFor(id, req) {
+  if (id === "common-goods-rest") return demoConfigFor(req);
+  if (id === "aurora-optics") return auroraConfig();
+  if (id === "maple-main-books") return booksConfig();
+  return undefined;
+}
+
 function origin(req) {
   const proto = req.headers["x-forwarded-proto"] ?? "http";
   const host = req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost";
@@ -46,14 +153,30 @@ function demoConfigFor(req) {
 }
 
 function seededPresets() {
-  const config = defaultAgentConfig();
-  config.agentName = "Common Goods Concierge";
-  config.persona = "A warm, precise concierge for Common Goods Co. — home, desk and outdoor everyday goods.";
-  config.greeting = "Hi — looking for something particular today?";
-  config.instructions =
-    "Help the buyer find items across the catalog, check live stock and the discounted offer before recommending, and never finalize a purchase without their explicit approval.";
   const now = new Date().toISOString();
-  return [{ slug: "common-goods-concierge", name: "Common Goods Concierge", merchantId: DEMO_MERCHANT_ID, config, createdAt: now, updatedAt: now }];
+  const concierge = defaultAgentConfig();
+  concierge.agentName = "Common Goods Concierge";
+  concierge.persona = "A warm, precise concierge for Common Goods Co. — home, desk and outdoor everyday goods.";
+  concierge.greeting = "Hi — looking for something particular today?";
+  concierge.tone = "friendly";
+
+  const optician = defaultAgentConfig();
+  optician.agentName = "Aurora Optician Assistant";
+  optician.persona = "A knowledgeable optical specialist who helps buyers choose eyewear and verifies prescriptions and fit.";
+  optician.greeting = "Hi — let's find the right pair for you.";
+  optician.tone = "professional";
+
+  const bookseller = defaultAgentConfig();
+  bookseller.agentName = "Maple & Main Bookseller";
+  bookseller.persona = "An enthusiastic indie bookseller who recommends titles by taste, budget and availability.";
+  bookseller.greeting = "Hi — what are you in the mood to read?";
+  bookseller.tone = "friendly";
+
+  return [
+    { slug: "common-goods-concierge", name: "Common Goods Concierge", merchantId: "common-goods-rest", config: concierge, createdAt: now, updatedAt: now },
+    { slug: "aurora-optician", name: "Aurora Optician", merchantId: "aurora-optics", config: optician, createdAt: now, updatedAt: now },
+    { slug: "maple-bookseller", name: "Maple & Main Bookseller", merchantId: "maple-main-books", config: bookseller, createdAt: now, updatedAt: now },
+  ];
 }
 
 function llmSettingsFromEnv() {
@@ -167,38 +290,44 @@ export default async function handler(req, res) {
   }
 
   if (key === "merchants" && method === "GET") {
-    const cfg = demoConfig();
-    return json(res, 200, [
-      {
-        id: DEMO_MERCHANT_ID,
-        name: cfg.merchant.name,
-        description: cfg.merchant.description,
-        baseUrl: `${origin(req)}${DEMO_STORE_PATH}`,
-        currency: cfg.merchant.defaultCurrency,
+    return json(
+      res,
+      200,
+      DEMO_MERCHANTS.map((m) => ({
+        id: m.id,
+        name: m.name,
+        description: m.description,
+        baseUrl: m.id === "common-goods-rest" ? `${origin(req)}${DEMO_STORE_PATH}` : configFor(m.id, req).http.baseUrl,
+        currency: m.currency,
         updatedAt: new Date().toISOString(),
-        state: "ready",
-        tags: ["catalog", "offers", "stock"],
-      },
-    ]);
+        state: m.state,
+        tags: m.tags,
+      })),
+    );
   }
   if (seg[0] === "merchants" && id && key === `merchants/${id}`) {
-    if (method === "GET") return json(res, 200, demoConfigFor(req));
+    const cfg = configFor(id, req);
+    if (!cfg) return json(res, 404, { error: "not_found" });
+    if (method === "GET") return json(res, 200, cfg);
     return notHosted(res, "editing/saving merchant configuration");
   }
   if (seg[0] === "merchants" && id && key === `merchants/${id}/agent`) {
+    if (!merchantEntry(id)) return json(res, 404, { error: "not_found" });
     if (method === "GET") return json(res, 200, defaultAgentConfig());
     return notHosted(res, "saving agent configuration");
   }
   if (seg[0] === "merchants" && id && key === `merchants/${id}/agent/tools`) {
-    const cfg = demoConfigFor(req);
+    const cfg = configFor(id, req);
+    if (!cfg) return json(res, 404, { error: "not_found" });
     return json(res, 200, { capabilities: enabledCapabilities(detectCapabilities(new RestCommerceProvider(cfg))), tools: merchantTools(cfg) });
   }
   if (seg[0] === "merchants" && id && key === `merchants/${id}/agent/kit`) {
+    const cfg = configFor(id, req);
+    if (!cfg) return json(res, 404, { error: "not_found" });
     const baseOrigin = origin(req);
-    const cfg = demoConfigFor(req);
     const agent = defaultAgentConfig();
     return json(res, 200, {
-      merchantId: DEMO_MERCHANT_ID,
+      merchantId: id,
       agent,
       baseUrl: baseOrigin,
       endpoints: {
@@ -215,13 +344,15 @@ export default async function handler(req, res) {
         "Verify availability + live offer before recommending anything.",
         "Hosted demo: transact against a gateway you run on your own VM.",
       ].join("\n"),
-      mcpServersJson: JSON.stringify({ mcpServers: { [DEMO_MERCHANT_ID]: { url: `${baseOrigin}/mcp` } } }, null, 2),
+      mcpServersJson: JSON.stringify({ mcpServers: { [id]: { url: `${baseOrigin}/mcp` } } }, null, 2),
       checkoutSnippet: "// Hosted demo: checkout runs against a gateway on your VM.",
     });
   }
   if (seg[0] === "merchants" && id && key === `merchants/${id}/landscape`) {
+    const cfg = configFor(id, req);
+    if (!cfg) return json(res, 404, { error: "not_found" });
     try {
-      const landscape = await buildLandscape(demoConfigFor(req), origin(req));
+      const landscape = await buildLandscape(cfg, origin(req));
       return json(res, 200, { ...landscape, live: false, running: false });
     } catch (err) {
       return json(res, 400, { error: "cannot build agent landscape", reason: err instanceof Error ? err.message : String(err) });
@@ -303,11 +434,12 @@ export default async function handler(req, res) {
   }
   if (key === "agents/chat" && method === "POST") {
     const body = await readBody(req);
-    if (body.merchantId !== DEMO_MERCHANT_ID || !Array.isArray(body.messages)) {
+    const cfg = configFor(body.merchantId, req);
+    if (!cfg || !Array.isArray(body.messages)) {
       return json(res, 400, { error: "merchantId and messages are required" });
     }
     const result = await runAgentChat({
-      merchant: demoConfigFor(req),
+      merchant: cfg,
       agent: body.config,
       settings: llmSettingsFromEnv(),
       messages: body.messages,
@@ -329,7 +461,16 @@ export default async function handler(req, res) {
     return json(res, 200, result);
   }
 
-  if (key === "audit") return json(res, 200, []);
+  if (key === "audit") {
+    const t = Date.now();
+    return json(res, 200, [
+      { event: "cart.created", timestamp: new Date(t - 60000).toISOString(), amount: 0, approval: { required: false }, explanation: "Agent opened a new cart for the buyer." },
+      { event: "cart.item_added", timestamp: new Date(t - 45000).toISOString(), amount: 209900, currency: "INR", approval: { required: false }, explanation: "Harbor Canvas Backpack (Navy) added — 1 × ₹2,099.00." },
+      { event: "offer.verified", timestamp: new Date(t - 30000).toISOString(), amount: 209900, currency: "INR", approval: { required: false }, explanation: "Live offer re-verified before quoting the buyer." },
+      { event: "checkout.completed", timestamp: new Date(t - 15000).toISOString(), amount: 209900, currency: "INR", approval: { required: true, granted: true }, explanation: "Buyer approved the purchase; order recorded." },
+      { event: "payment.authorized", timestamp: new Date(t - 5000).toISOString(), amount: 209900, currency: "INR", approval: { required: false }, explanation: "Razorpay test-mode payment authorized (order rzp-test-8842)." },
+    ]);
+  }
   if (key === "templates/blank") return notHosted(res, "creating new merchants");
 
   return json(res, 404, { error: "not_found" });
