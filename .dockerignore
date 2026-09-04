@@ -8,5 +8,6 @@ tests
 scripts
 packages/*/test
 packages/*/node_modules
-pnpm-lock.yaml
+docs/.vitepress
+apps/dashboard/web-dist
 agentic-commerce-gateway-architecture.md

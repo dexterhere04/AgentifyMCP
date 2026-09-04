@@ -1,4 +1,5 @@
 services:
+  # Agent gateway — the runtime agent surfaces (:8787).
   gateway:
     build: .
     ports:
@@ -6,5 +7,24 @@ services:
     environment:
       PORT: "8787"
       BASE_URL: "http://localhost:8787"
-    # Connect a REST merchant by mounting a config and running the gateway
-    # with it via the CLI image instead when you need custom providers.
+      # Connect a REST merchant by placing a config in ./data/merchants and
+      # setting MERCHANT_CONFIG=/app/data/merchants/<file>.json
+      # MERCHANT_CONFIG: /app/data/merchants/my-store.json
+      # Optional: RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / AGENTIFY_AUDIT_PATH
+    volumes:
+      - ./data/merchants:/app/data/merchants
+
+  # Local dashboard — configure, test, run and audit merchants (:8788).
+  # Runs the gateway as a child process on demand.
+  dashboard:
+    build: .
+    command: ["node", "--import", "tsx", "apps/dashboard/src/api/index.ts"]
+    ports:
+      - "8788:8788"
+    environment:
+      DASHBOARD_PORT: "8788"
+      DATA_DIR: "/app/data/merchants"
+    volumes:
+      - ./data/merchants:/app/data/merchants
+    depends_on:
+      - gateway
