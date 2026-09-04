@@ -22,7 +22,8 @@
     "@agentify/ucp": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "hono": "^4.13.5",
-    "@agentify/payments-razorpay": "workspace:*"
+    "@agentify/payments-razorpay": "workspace:*",
+    "@agentify/audit": "workspace:*"
   },
   "files": [
     "dist"

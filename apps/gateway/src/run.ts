@@ -52,6 +52,8 @@ async function main(): Promise<void> {
       await gateway.mcp.close();
       const closeable = gateway.provider as { close?: () => void };
       if (typeof closeable.close === "function") closeable.close();
+      const auditStore = gateway.audit as { close?: () => void };
+      if (typeof auditStore.close === "function") auditStore.close();
       server.close(() => process.exit(0));
     };
     process.on("SIGINT", () => void shutdown());

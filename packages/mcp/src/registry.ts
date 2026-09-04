@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { AuditStore } from "@agentify/audit";
 import {
   detectCapabilities,
   type Capabilities,
@@ -18,6 +19,7 @@ export class ToolError extends Error {
       | "UNSUPPORTED_CAPABILITY"
       | "BACKEND_ERROR"
       | "RATE_LIMITED"
+      | "PRICE_CHANGED"
       | "INTERNAL",
     message: string,
     readonly details?: Record<string, unknown>,
@@ -55,6 +57,8 @@ export type CompleteCheckoutFn = (
 
 export interface CommerceToolRegistryOptions {
   completeCheckout?: CompleteCheckoutFn;
+  /** When set, the read-only get_audit_trail tool is exposed. */
+  audit?: AuditStore;
 }
 
 const TOOLS: Record<
@@ -134,6 +138,11 @@ const TOOLS: Record<
       "Retrieve an order by id after a completed checkout (e.g. after payment confirmation). Requires meta.ucp-agent.profile.",
     enabled: (caps) => caps.orders,
   },
+  get_audit_trail: {
+    description:
+      "Read the explainable, bounded, approval-gated audit trail for a checkout: every cart/checkout/payment action with amounts, approval state and explanations, including any refusals (e.g. PRICE_CHANGED). Read-only.",
+    enabled: () => true,
+  },
 };
 
 /**
@@ -161,7 +170,11 @@ export class CommerceToolRegistry {
 
   list(): Array<{ name: ToolName; description: string; inputSchema: z.ZodTypeAny }> {
     return (Object.keys(TOOLS) as ToolName[])
-      .filter((name) => TOOLS[name].enabled(this.caps))
+      .filter(
+        (name) =>
+          TOOLS[name].enabled(this.caps) &&
+          !(name === "get_audit_trail" && !this.options.audit),
+      )
       .map((name) => ({
         name,
         description: TOOLS[name].description,
@@ -175,7 +188,8 @@ export class CommerceToolRegistry {
       return { ok: false, error: { code: "INVALID_ARGUMENT", message: `Unknown tool: ${name}` } };
     }
     const toolName = name as ToolName;
-    if (!def.enabled(this.caps)) {
+    const hidden = toolName === "get_audit_trail" && !this.options.audit;
+    if (!def.enabled(this.caps) || hidden) {
       return {
         ok: false,
         error: {
@@ -370,6 +384,13 @@ export class CommerceToolRegistry {
           throw new ToolError("UNSUPPORTED_CAPABILITY", "orders capability unavailable");
         }
         return this.provider.orders.get(a.orderId);
+      }
+      case "get_audit_trail": {
+        const a = args as z.infer<typeof ToolArgSchemas.get_audit_trail>;
+        if (!this.options.audit) {
+          throw new ToolError("UNSUPPORTED_CAPABILITY", "audit trail unavailable");
+        }
+        return { checkoutId: a.checkoutId, events: this.options.audit.byCheckout(a.checkoutId) };
       }
     }
   }

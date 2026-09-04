@@ -20,7 +20,8 @@
     "build": "pnpm -r --if-present run build",
     "clean": "pnpm -r --if-present run clean",
     "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs && node scripts/postbuild-docs.mjs"
+    "docs:build": "vitepress build docs && node scripts/postbuild-docs.mjs",
+    "demo:audit": "tsx scripts/audit-demo.ts"
   },
   "devDependencies": {
     "@agentify/adapter-mock": "workspace:*",
@@ -39,6 +40,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vitepress": "^1.6.4",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "@agentify/audit": "workspace:*"
   }
 }

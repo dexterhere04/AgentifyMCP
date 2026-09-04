@@ -179,6 +179,51 @@ describe("MVP 6 — mock checkout", () => {
   });
 });
 
+describe("graceful failure — price changes after selection (PriceLock)", () => {
+  it("refuses completion when the live price moved, updates the quote, and completes after re-approval", async () => {
+    const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });
+    const cart = await provider.cart!.create({ agentProfile: AGENT });
+    await provider.cart!.addItem({ cartId: cart.id, variantId: "neck-anniversary-18", quantity: 1 });
+    const checkout = await provider.checkout!.create({ cartId: cart.id });
+    expect(checkout.totals?.total).toEqual(inr(3999));
+
+    // merchant raises the live sale price between selection and completion
+    provider.simulatePriceChange("neck-anniversary-18", 4299);
+
+    await expect(
+      provider.checkout!.complete(checkout.id, { approval: { buyerApproved: true } }),
+    ).rejects.toMatchObject({ code: "PRICE_CHANGED" });
+
+    // quote refreshed to the live total and the checkout awaits re-approval
+    const after = await provider.checkout!.get(checkout.id);
+    expect(after.status).toBe("awaiting_approval");
+    expect(after.totals?.total).toEqual(inr(4299));
+
+    // re-approval at the new total completes
+    const order = await provider.checkout!.complete(checkout.id, { approval: { buyerApproved: true } });
+    expect(order.status).toBe("confirmed");
+    expect(order.total).toEqual(inr(4299));
+
+    // only the approved amount was charged once
+    const avail = await provider.inventory!.check({ variantId: "neck-anniversary-18" });
+    expect(avail.quantity).toBe(11);
+  });
+
+  it("keeps gating: no approval still refuses even after a re-quote", async () => {
+    const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });
+    const cart = await provider.cart!.create({ agentProfile: AGENT });
+    await provider.cart!.addItem({ cartId: cart.id, variantId: "neck-anniversary-18", quantity: 1 });
+    const checkout = await provider.checkout!.create({ cartId: cart.id });
+    provider.simulatePriceChange("neck-anniversary-18", 4299);
+    await expect(provider.checkout!.complete(checkout.id)).rejects.toMatchObject({
+      code: "INVALID_ARGUMENT", // approval required comes before price check
+    });
+    await expect(
+      provider.checkout!.complete(checkout.id, { approval: { buyerApproved: false } }),
+    ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+  });
+});
+
 describe("graceful failure — stock disappears after selection", () => {
   it("fails completion when another purchase consumed the stock", async () => {
     const provider = createMockCommerceProvider({ storeUrl: "https://demo.example" });

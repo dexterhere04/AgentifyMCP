@@ -110,6 +110,7 @@ describe("MCP protocol over Streamable HTTP", () => {
       "complete_checkout",
       "cancel_checkout",
       "get_order",
+      "get_audit_trail",
     ]);
     await gateway.mcp.close();
   });
@@ -442,7 +443,7 @@ describe("second merchant with a different shape", () => {
     const names = ((list.payload as JsonRpcResponse).result?.tools as Array<{ name: string }>).map(
       (t) => t.name,
     );
-    expect(names).toEqual(["search_catalog", "get_product", "get_variant"]);
+    expect(names).toEqual(["search_catalog", "get_product", "get_variant", "get_audit_trail"]);
 
     // The UCP discovery profile must also only advertise catalog capabilities.
     const profileRes = await gateway.app.request("/.well-known/ucp");

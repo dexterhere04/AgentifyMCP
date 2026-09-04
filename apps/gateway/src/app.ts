@@ -1,6 +1,12 @@
 import { Hono, type Context } from "hono";
 import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import {
+  createAuditedCommerce,
+  InMemoryAuditStore,
+  SqliteAuditStore,
+  type AuditStore,
+} from "@agentify/audit";
+import {
   detectCapabilities,
   type CommerceProvider,
   type PaymentGateway,
@@ -13,8 +19,7 @@ import {
   SERVER_VERSION,
   type StreamableHttpEndpoint,
 } from "@agentify/mcp";
-import { InMemoryAuditStore, PaymentOrchestrator } from "@agentify/payments";
-import type { AuditStore } from "@agentify/payments";
+import { PaymentOrchestrator } from "@agentify/payments";
 import {
   assertValidUcpProfile,
   buildUcpProfile,
@@ -54,12 +59,23 @@ export interface CreateGatewayOptions {
  */
 export async function createGateway(options: CreateGatewayOptions = {}): Promise<Gateway> {
   const config = options.config ?? loadConfig();
-  const provider: CommerceProvider =
+  const rawProvider: CommerceProvider =
     options.provider ?? createMockCommerceProvider({ storeUrl: config.storeUrl });
+
+  // Explainable/bounded/gated audit trail. Persist to SQLite when
+  // AGENTIFY_AUDIT_PATH is set (e.g. ./data/audit.db); in-memory otherwise.
+  const auditPath = process.env.AGENTIFY_AUDIT_PATH;
+  const audit: AuditStore =
+    auditPath && auditPath.trim() !== "" ? new SqliteAuditStore(auditPath) : new InMemoryAuditStore();
+
+  // Every cart/checkout money action emits an audit event with explanation,
+  // bounds and approval state. When a payment gateway is wired, the
+  // PaymentOrchestrator owns completion events (no duplicates).
+  const provider = createAuditedCommerce(rawProvider, audit, { recordCompletion: !options.payment });
+
   const metadata = await createMetadata(provider, { baseUrl: config.baseUrl });
   const capabilities = detectCapabilities(provider);
 
-  const audit = new InMemoryAuditStore();
   let payments: PaymentOrchestrator | undefined;
   if (options.payment) {
     const merchant = await provider.merchant();
@@ -76,7 +92,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
         payments.startPayment(checkoutId, { agent: opts.agentProfile })
     : undefined;
 
-  const mcp = createStreamableHttpEndpoint(provider, completeCheckout ? { completeCheckout } : {});
+  const mcp = createStreamableHttpEndpoint(provider, { ...(completeCheckout ? { completeCheckout } : {}), audit });
 
   // UCP business discovery profile. Built and validated at startup so a
   // malformed/inconsistent configuration fails fast instead of serving an
@@ -160,6 +176,22 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     });
   }
 
+  // Audit trail (explainable, bounded, gated) — read-only.
+  app.get("/audit", (c) => {
+    const checkoutId = c.req.query("checkoutId");
+    const orderId = c.req.query("orderId");
+    const type = c.req.query("type");
+    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : undefined;
+    return c.json(audit.list({
+      ...(checkoutId ? { checkoutId } : {}),
+      ...(orderId ? { orderId } : {}),
+      ...(type ? { type } : {}),
+      ...(limit ? { limit } : {}),
+    }));
+  });
+
+  app.get("/audit/:checkoutId", (c) => c.json(audit.byCheckout(c.req.param("checkoutId"))));
+
   // Read-only developer/search endpoints (useful for agents and curl demos).
   app.get("/catalog/search", async (c) => {
     try {
@@ -222,11 +254,13 @@ function providerErrorResponse(c: Context, err: unknown): Response {
         ? 404
         : err.code === "INVALID_ARGUMENT"
           ? 400
-          : err.code === "RATE_LIMITED"
-            ? 429
-            : err.code === "UNSUPPORTED_CAPABILITY"
-              ? 501
-              : 502;
+          : err.code === "PRICE_CHANGED"
+            ? 409
+            : err.code === "RATE_LIMITED"
+              ? 429
+              : err.code === "UNSUPPORTED_CAPABILITY"
+                ? 501
+                : 502;
     return c.json({ error: { code: err.code, message: err.message, details: err.details } }, status);
   }
   return c.json({ error: { code: "INTERNAL", message: err instanceof Error ? err.message : "internal error" } }, 500);

@@ -116,6 +116,31 @@ function renderText(tool: string, data: unknown): string {
     return renderOrder(data);
   }
   if (tool === "get_order") return renderOrder(data);
+  if (tool === "get_audit_trail") {
+    const trail = data as {
+      checkoutId: string;
+      events: Array<{
+        event: string;
+        reasonCode?: string;
+        timestamp: string;
+        amount?: number;
+        currency?: string;
+        approval?: { required: boolean; granted?: boolean; received?: boolean };
+        explanation?: string;
+        order_id?: string;
+        payment_id?: string;
+      }>;
+    };
+    const lines = trail.events.map((e) => {
+      const granted = e.approval ? (e.approval.granted ?? e.approval.received) : undefined;
+      const approval = e.approval
+        ? ` approval=${e.approval.required ? "required" : "n/a"}/${granted ? "granted" : "not-granted"}`
+        : "";
+      return `  [${e.timestamp}] ${e.event}${e.reasonCode ? ` (${e.reasonCode})` : ""}${e.order_id ? ` order=${e.order_id}` : ""}${e.payment_id ? ` payment=${e.payment_id}` : ""}${e.amount !== undefined ? ` amount=${e.amount}` : ""}${e.currency ? ` ${e.currency}` : ""}${approval}${e.explanation ? ` — ${e.explanation}` : ""}`;
+    });
+    return `Audit trail for checkout ${trail.checkoutId} (${trail.events.length} event(s))\n` +
+      (lines.join("\n") || "  (no events)");
+  }
   if (tool === "search_catalog") {
     const r = data as {
       items: Array<{

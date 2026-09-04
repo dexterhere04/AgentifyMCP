@@ -13,7 +13,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agentify/canonical-commerce": "workspace:*"
+    "@agentify/canonical-commerce": "workspace:*",
+    "@agentify/audit": "workspace:*"
   },
   "files": [
     "dist"

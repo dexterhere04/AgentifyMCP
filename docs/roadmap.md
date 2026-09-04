@@ -12,6 +12,7 @@ Status of the architecture doc's MVP plan.
 | 3 | Config-driven REST adapter + second merchant | ✅ |
 | 7 | Razorpay test-mode payment (webhook-verified + polling) + audit | ✅ |
 | — | §6.5 Optional SKILL.md — reusable agent-side shopping playbook | ✅ |
+| — | §16 Audit trail + Explainable/Bounded/Gated money actions (PriceLock) | ✅ |
 | 4 | OpenAPI-assisted integration | 🔜 |
 | 5 | Catalog index + semantic search | 🔜 |
 | 6 | Full checkout fidelity (shipping/coupon, state machine polish) | 🔜 |

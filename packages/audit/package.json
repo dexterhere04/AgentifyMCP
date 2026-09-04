@@ -1,5 +1,5 @@
 {
-  "name": "@agentify/mcp",
+  "name": "@agentify/audit",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,25 +12,15 @@
     "build": "tsc -p tsconfig.build.json",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@agentify/canonical-commerce": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.5.4",
-    "@agentify/audit": "workspace:*"
-  },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "license": "MIT",
   "sideEffects": false,
+  "dependencies": {
+    "@agentify/canonical-commerce": "workspace:*"
+  },
   "publishConfig": {
     "access": "public",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "import": "./dist/index.js"
-      }
-    },
+    "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
     "types": "./dist/index.d.ts",
     "main": "./dist/index.js"
   }

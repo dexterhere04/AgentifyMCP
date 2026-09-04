@@ -14,6 +14,7 @@ export type ProviderErrorCode =
   | "INVALID_ARGUMENT"
   | "RATE_LIMITED"
   | "UNSUPPORTED_CAPABILITY"
+  | "PRICE_CHANGED"
   | "INTERNAL";
 
 export class ProviderError extends Error {
@@ -72,6 +73,11 @@ export function rateLimited(message = "rate limit exceeded"): ProviderError {
   return new ProviderError("RATE_LIMITED", message);
 }
 
+/** Live price no longer matches the quoted/approved amount — require re-approval. */
+export function priceChanged(message: string, details?: Record<string, unknown>): ProviderError {
+  return new ProviderError("PRICE_CHANGED", message, details);
+}
+
 /** HTTP status that best represents a provider error, used by the gateway. */
 export function providerErrorStatus(err: ProviderError): number {
   switch (err.code) {
@@ -79,6 +85,8 @@ export function providerErrorStatus(err: ProviderError): number {
       return 404;
     case "INVALID_ARGUMENT":
       return 400;
+    case "PRICE_CHANGED":
+      return 409;
     case "BACKEND_UNAUTHORIZED":
       return 502;
     case "RATE_LIMITED":

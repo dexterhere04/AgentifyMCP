@@ -179,6 +179,13 @@ export const GetOrderArgs = z
   })
   .strict();
 
+export const GetAuditTrailArgs = z
+  .object({
+    checkoutId: z.string().describe("Checkout id to read the explainable audit trail for."),
+    meta: AgentMetaOptional,
+  })
+  .strict();
+
 export const ToolArgSchemas = {
   search_catalog: SearchCatalogArgs,
   get_product: GetProductArgs,
@@ -195,6 +202,7 @@ export const ToolArgSchemas = {
   complete_checkout: CompleteCheckoutArgs,
   cancel_checkout: CancelCheckoutArgs,
   get_order: GetOrderArgs,
+  get_audit_trail: GetAuditTrailArgs,
 } as const;
 
 export type ToolName = keyof typeof ToolArgSchemas;

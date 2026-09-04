@@ -3,6 +3,9 @@ import {
   buildMerchant,
   computeBestPrice,
   fromMinor,
+  moneyEquals,
+  priceChanged,
+  toMinorUnits,
   type AddCartItemInput,
   type Availability,
   type AvailabilityStatus,
@@ -811,6 +814,36 @@ export class MockCommerceProvider implements CommerceProvider {
     const cartRecord = this.cartRecords.get(record.cartId);
     const items = cartRecord?.cart.items ?? [];
 
+    // PriceLock: re-quote every line from the LIVE offer before finalizing so a
+    // price change between selection and completion is caught (bounded + gated).
+    if (cartRecord) {
+      let changed = false;
+      const changedVariants: string[] = [];
+      for (const item of items) {
+        const v = this.variantRowById(item.variantId);
+        if (!v) throw notFound("variant", item.variantId);
+        const live = this.offerForVariant(v).price;
+        if (!moneyEquals(live, item.unitPrice)) {
+          item.unitPrice = live;
+          changedVariants.push(item.variantId);
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.recomputeCart(cartRecord);
+        const subtotal = cartRecord.cart.subtotal;
+        checkout.totals = { subtotal, total: subtotal, currency: checkout.currency };
+        checkout.status = "awaiting_approval";
+        checkout.updatedAt = this.now();
+        throw priceChanged(
+          `Price changed for checkout "${id}": the quoted total no longer matches the live offers ` +
+            `(variants: ${changedVariants.join(", ")}). New total is ${subtotal.amount} ${subtotal.currency}. ` +
+            "Re-approve to continue at the new total.",
+          { checkoutId: id, newTotal: subtotal.amount, currency: subtotal.currency, changedVariants },
+        );
+      }
+    }
+
     // Verify every line still has stock before committing (graceful failure).
     for (const item of items) {
       const v = this.variantRowById(item.variantId);
@@ -868,6 +901,17 @@ export class MockCommerceProvider implements CommerceProvider {
     const order = this.orderStore.get(id);
     if (!order) throw notFound("order", id);
     return order;
+  }
+
+  /**
+   * Test/demo hook: simulate the merchant changing a variant's live sale price
+   * (PriceLock exercises the "price changed after selection" failure path).
+   */
+  simulatePriceChange(variantId: string, salePriceMajor: number): void {
+    const result = this.db
+      .prepare("UPDATE variants SET sale_price_minor = ?, sale_currency = 'INR' WHERE id = ?")
+      .run(toMinorUnits(salePriceMajor, "INR"), variantId);
+    if (result.changes !== 1) throw notFound("variant", variantId);
   }
 }
 

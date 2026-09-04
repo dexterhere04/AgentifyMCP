@@ -85,6 +85,7 @@ describe("second merchant over REST — surfaces derived from config only", () =
       "get_variant",
       "check_availability",
       "get_offer",
+      "get_audit_trail",
     ]);
     await gateway.mcp.close();
     void store;
