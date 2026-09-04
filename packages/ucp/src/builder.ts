@@ -1,4 +1,4 @@
-import type { Capabilities } from "@gateway/canonical-commerce";
+import type { Capabilities } from "@agentify/canonical-commerce";
 import {
   SHOPPING_SERVICE,
   UCP_VERSION,
@@ -20,7 +20,7 @@ export interface UcpProfileConfig {
   version?: string;
   /** Public verification keys (RFC 7517 JWK). Optional until signing is enabled. */
   keys?: Array<{ kty: string; kid?: string; use?: string; alg?: string; crv?: string; x?: string; y?: string }>;
-  /** Payment handler registry (reverse-domain -> entries), e.g. { "dev.gateway.razorpay.test": [...] }. */
+  /** Payment handler registry (reverse-domain -> entries), e.g. { "dev.agentify.razorpay.test": [...] }. */
   paymentHandlers?: Record<string, Array<Record<string, unknown>>>;
   /** When true, require an https baseUrl unless the host is localhost. */
   requireHttps?: boolean;

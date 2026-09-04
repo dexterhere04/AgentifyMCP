@@ -12,7 +12,7 @@ import {
   type ProductSummary,
   type Variant,
   invalidArgument,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import { HttpClient } from "./http.js";
 import { read, interpolate } from "./path.js";
 import {

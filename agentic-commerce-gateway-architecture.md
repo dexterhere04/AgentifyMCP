@@ -281,7 +281,7 @@ For merchants willing to add code.
 Example:
 
 ```typescript
-import { createAgentCommerce } from "@gateway/sdk";
+import { createAgentCommerce } from "@agentify/sdk";
 
 const commerce = createAgentCommerce({
   catalog: {

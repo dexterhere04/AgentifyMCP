@@ -3,7 +3,7 @@ import {
   detectCapabilities,
   type Capabilities,
   type CommerceProvider,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import {
   UCP_CAPABILITY_CART,
   UCP_CAPABILITY_CATALOG_LOOKUP,

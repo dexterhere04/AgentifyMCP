@@ -6,7 +6,7 @@ import {
   type PaymentGateway,
   type PaymentIntent,
   ProviderError,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import type { AuditStore } from "./audit.js";
 
 export class PaymentError extends Error {

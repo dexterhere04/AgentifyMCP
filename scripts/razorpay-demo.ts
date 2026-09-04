@@ -9,13 +9,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
+import { createGateway, type Gateway } from "@agentify/gateway";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import {
   FakeRazorpayGateway,
   paymentLinkPaidPayload,
   razorpaySignature,
-} from "@gateway/payments-razorpay";
+} from "@agentify/payments-razorpay";
 
 const WEBHOOK_SECRET = "whsec_test";
 const AGENT = { "ucp-agent": { profile: "https://agent.example/.well-known/ucp" } };
@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   const gateway = await createGateway({
     config: { port: 0, baseUrl: "https://demo.example", storeUrl: "https://demo.example" },
     provider,
-    payment: { gateway: new FakeRazorpayGateway(WEBHOOK_SECRET), handlerName: "dev.gateway.razorpay.test" },
+    payment: { gateway: new FakeRazorpayGateway(WEBHOOK_SECRET), handlerName: "dev.agentify.razorpay.test" },
   });
   const nodeServer = serve({ fetch: gateway.app.fetch, port: 0 }, () => {});
   await new Promise((r) => setTimeout(r, 50));

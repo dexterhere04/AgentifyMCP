@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
+import { createGateway, type Gateway } from "@agentify/gateway";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import {
   FakeRazorpayGateway,
   paymentLinkPaidPayload,
   razorpaySignature,
-} from "@gateway/payments-razorpay";
+} from "@agentify/payments-razorpay";
 
 const AGENT = { "ucp-agent": { profile: "https://agent.example/.well-known/ucp" } };
 const WEBHOOK_SECRET = "whsec_test";
@@ -15,7 +15,7 @@ async function startGatewayWithPayments(): Promise<Gateway> {
   const gateway = await createGateway({
     config: { port: 0, baseUrl: "https://demo.example", storeUrl: "https://demo.example" },
     provider,
-    payment: { gateway: new FakeRazorpayGateway(WEBHOOK_SECRET), handlerName: "dev.gateway.razorpay.test" },
+    payment: { gateway: new FakeRazorpayGateway(WEBHOOK_SECRET), handlerName: "dev.agentify.razorpay.test" },
   });
   return gateway;
 }
@@ -141,7 +141,7 @@ describe("MVP 7 — Razorpay test-mode checkout over HTTP", () => {
     const profile = (await profileRes.json()) as {
       ucp: { payment_handlers: Record<string, unknown> };
     };
-    expect(profile.ucp.payment_handlers["dev.gateway.razorpay.test"]).toBeDefined();
+    expect(profile.ucp.payment_handlers["dev.agentify.razorpay.test"]).toBeDefined();
 
     await gateway.mcp.close();
   });

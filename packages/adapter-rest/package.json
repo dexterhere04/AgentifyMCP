@@ -1,5 +1,5 @@
 {
-  "name": "@gateway/adapter-rest",
+  "name": "@agentify/adapter-rest",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,6 +11,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gateway/canonical-commerce": "workspace:*"
+    "@agentify/canonical-commerce": "workspace:*"
   }
 }

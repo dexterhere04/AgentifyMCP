@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { CommerceProvider } from "@gateway/canonical-commerce";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
+import type { CommerceProvider } from "@agentify/canonical-commerce";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
+import { createGateway, type Gateway } from "@agentify/gateway";
 
 interface RpcResult {
   sessionId?: string;

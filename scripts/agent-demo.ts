@@ -19,7 +19,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
+import { createGateway, type Gateway } from "@agentify/gateway";
 
 const BUDGET_MINOR = 500000; // Rs 5,000 in paise
 const AGENT_PROFILE = "https://agent.example/.well-known/ucp";

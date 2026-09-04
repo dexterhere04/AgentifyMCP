@@ -4,7 +4,7 @@ import {
   type CapabilityName,
   type CommerceProvider,
   type Merchant,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 
 /**
  * Merchant-facing metadata generators.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import { createCommerceMcpServer, toolSpecsToSdkTools, SERVER_NAME } from "../src/index.js";
 import { CommerceToolRegistry } from "../src/index.js";
 

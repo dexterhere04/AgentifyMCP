@@ -8,31 +8,31 @@ importers:
 
   .:
     devDependencies:
-      '@gateway/adapter-mock':
+      '@agentify/adapter-mock':
         specifier: workspace:*
         version: link:packages/adapter-mock
-      '@gateway/adapter-rest':
+      '@agentify/adapter-rest':
         specifier: workspace:*
         version: link:packages/adapter-rest
-      '@gateway/app-gateway':
-        specifier: workspace:*
-        version: link:apps/gateway
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:packages/canonical-commerce
-      '@gateway/mcp':
+      '@agentify/gateway':
+        specifier: workspace:*
+        version: link:apps/gateway
+      '@agentify/mcp':
         specifier: workspace:*
         version: link:packages/mcp
-      '@gateway/metadata':
+      '@agentify/metadata':
         specifier: workspace:*
         version: link:packages/metadata
-      '@gateway/payments':
+      '@agentify/payments':
         specifier: workspace:*
         version: link:packages/payments
-      '@gateway/payments-razorpay':
+      '@agentify/payments-razorpay':
         specifier: workspace:*
         version: link:packages/payments-razorpay
-      '@gateway/ucp':
+      '@agentify/ucp':
         specifier: workspace:*
         version: link:packages/ucp
       '@hono/node-server':
@@ -56,22 +56,22 @@ importers:
 
   apps/gateway:
     dependencies:
-      '@gateway/adapter-mock':
+      '@agentify/adapter-mock':
         specifier: workspace:*
         version: link:../../packages/adapter-mock
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../../packages/canonical-commerce
-      '@gateway/mcp':
+      '@agentify/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
-      '@gateway/metadata':
+      '@agentify/metadata':
         specifier: workspace:*
         version: link:../../packages/metadata
-      '@gateway/payments':
+      '@agentify/payments':
         specifier: workspace:*
         version: link:../../packages/payments
-      '@gateway/ucp':
+      '@agentify/ucp':
         specifier: workspace:*
         version: link:../../packages/ucp
       '@hono/node-server':
@@ -83,13 +83,13 @@ importers:
 
   packages/adapter-mock:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
 
   packages/adapter-rest:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
 
@@ -101,7 +101,7 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
       '@modelcontextprotocol/sdk':
@@ -113,19 +113,19 @@ importers:
 
   packages/metadata:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
 
   packages/payments:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
 
   packages/payments-razorpay:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
       razorpay:
@@ -134,7 +134,7 @@ importers:
 
   packages/ucp:
     dependencies:
-      '@gateway/canonical-commerce':
+      '@agentify/canonical-commerce':
         specifier: workspace:*
         version: link:../canonical-commerce
       zod:

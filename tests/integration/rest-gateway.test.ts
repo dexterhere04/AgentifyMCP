@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
+import { createGateway, type Gateway } from "@agentify/gateway";
 import {
   RestCommerceProvider,
   buildSecondStoreConfig,
   createFixtureStoreServer,
   FIXTURE_TOKEN,
   type FixtureStore,
-} from "@gateway/adapter-rest";
+} from "@agentify/adapter-rest";
 
 /**
  * Moat proof (architecture doc section 21): connecting a SECOND merchant with

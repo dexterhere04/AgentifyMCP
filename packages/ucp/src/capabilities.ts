@@ -1,4 +1,4 @@
-import type { Capabilities } from "@gateway/canonical-commerce";
+import type { Capabilities } from "@agentify/canonical-commerce";
 
 /**
  * Map the gateway's canonical capability graph onto UCP capability ids.

@@ -30,7 +30,7 @@ import {
   backendTimeout,
   rateLimited,
   ProviderError,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import {
   openMockMerchantDb,
   type DiscountRow,

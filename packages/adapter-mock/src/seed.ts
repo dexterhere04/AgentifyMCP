@@ -1,4 +1,4 @@
-import type { AvailabilityStatus } from "@gateway/canonical-commerce";
+import type { AvailabilityStatus } from "@agentify/canonical-commerce";
 
 /**
  * Seed catalog for the mock merchant ("Aarna Jewels").

@@ -16,7 +16,7 @@ import {
   type CatalogSearchResult,
   malformedRecord,
   invalidArgument,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import { read } from "./path.js";
 import type {
   AvailabilityRef,

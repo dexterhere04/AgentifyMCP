@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { Money } from "@gateway/canonical-commerce";
+import type { Money } from "@agentify/canonical-commerce";
 import {
   RestCommerceProvider,
   buildSecondStoreConfig,

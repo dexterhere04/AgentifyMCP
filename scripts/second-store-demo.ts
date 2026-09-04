@@ -9,13 +9,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
-import { createGateway, type Gateway } from "@gateway/app-gateway";
+import { createGateway, type Gateway } from "@agentify/gateway";
 import {
   RestCommerceProvider,
   buildSecondStoreConfig,
   createFixtureStoreServer,
   FIXTURE_TOKEN,
-} from "@gateway/adapter-rest";
+} from "@agentify/adapter-rest";
 
 async function main(): Promise<void> {
   console.log("◆ Booting the second merchant's REST backend (Shape B/C JSON)…");

@@ -7,7 +7,7 @@ import {
   type PaymentOrder,
   type PaymentOrderRequest,
   type Money,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import { razorpaySignature } from "./razorpay.js";
 
 /**

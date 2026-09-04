@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 
 /**
  * Gateway server entry point. Run with `pnpm gateway` (root) or
- * `pnpm --filter @gateway/app-gateway start`.
+ * `pnpm --filter @agentify/gateway start`.
  */
 async function main(): Promise<void> {
   try {

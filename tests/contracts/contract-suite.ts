@@ -3,7 +3,7 @@ import {
   detectCapabilities,
   isProviderError,
   type CommerceProvider,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 
 /**
  * The shared CommerceProvider contract suite (architecture doc section 13).

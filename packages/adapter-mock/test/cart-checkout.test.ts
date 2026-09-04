@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Cart, Money } from "@gateway/canonical-commerce";
+import type { Cart, Money } from "@agentify/canonical-commerce";
 import { createMockCommerceProvider, type MockCommerceProvider } from "../src/index.js";
 
 const inr = (amountMajor: number): Money => ({ amount: Math.round(amountMajor * 100), currency: "INR" });

@@ -1,5 +1,5 @@
 {
-  "name": "@gateway/app-gateway",
+  "name": "@agentify/gateway",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,12 +12,12 @@
     "start": "tsx src/run.ts"
   },
   "dependencies": {
-    "@gateway/adapter-mock": "workspace:*",
-    "@gateway/canonical-commerce": "workspace:*",
-    "@gateway/mcp": "workspace:*",
-    "@gateway/metadata": "workspace:*",
-    "@gateway/payments": "workspace:*",
-    "@gateway/ucp": "workspace:*",
+    "@agentify/adapter-mock": "workspace:*",
+    "@agentify/canonical-commerce": "workspace:*",
+    "@agentify/mcp": "workspace:*",
+    "@agentify/metadata": "workspace:*",
+    "@agentify/payments": "workspace:*",
+    "@agentify/ucp": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "hono": "^4.13.5"
   }

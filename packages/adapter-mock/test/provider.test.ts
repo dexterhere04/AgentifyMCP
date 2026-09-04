@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { isProviderError, type Money } from "@gateway/canonical-commerce";
+import { isProviderError, type Money } from "@agentify/canonical-commerce";
 import { createMockCommerceProvider, type MockCommerceProvider } from "../src/index.js";
 import { runCommerceProviderContractSuite } from "../../../tests/contracts/contract-suite.js";
 

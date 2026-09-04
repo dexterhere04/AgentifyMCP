@@ -1,5 +1,5 @@
 {
-  "name": "@gateway/canonical-commerce",
+  "name": "@agentify/canonical-commerce",
   "version": "0.1.0",
   "private": true,
   "type": "module",

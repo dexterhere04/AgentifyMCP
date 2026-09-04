@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { toMinorUnits } from "@gateway/canonical-commerce";
+import { toMinorUnits } from "@agentify/canonical-commerce";
 import type { SeedDiscount, SeedProduct } from "./seed.js";
 
 /**

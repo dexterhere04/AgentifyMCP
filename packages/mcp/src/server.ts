@@ -8,7 +8,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { CommerceProvider } from "@gateway/canonical-commerce";
+import type { CommerceProvider } from "@agentify/canonical-commerce";
 import {
   CommerceToolRegistry,
   isToolFailure,

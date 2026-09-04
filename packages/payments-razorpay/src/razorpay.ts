@@ -8,7 +8,7 @@ import {
   type PaymentLinkRequest,
   type PaymentOrder,
   type PaymentOrderRequest,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import type { RazorpayConfig, RazorpayWebhookPayload } from "./config.js";
 
 /**

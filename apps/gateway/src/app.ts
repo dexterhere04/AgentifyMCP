@@ -1,26 +1,26 @@
 import { Hono, type Context } from "hono";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import {
   detectCapabilities,
   type CommerceProvider,
   type PaymentGateway,
   isProviderError,
-} from "@gateway/canonical-commerce";
-import { createMetadata, type GeneratedMetadata } from "@gateway/metadata";
+} from "@agentify/canonical-commerce";
+import { createMetadata, type GeneratedMetadata } from "@agentify/metadata";
 import {
   createStreamableHttpEndpoint,
   SERVER_NAME,
   SERVER_VERSION,
   type StreamableHttpEndpoint,
-} from "@gateway/mcp";
-import { InMemoryAuditStore, PaymentOrchestrator } from "@gateway/payments";
-import type { AuditStore } from "@gateway/payments";
+} from "@agentify/mcp";
+import { InMemoryAuditStore, PaymentOrchestrator } from "@agentify/payments";
+import type { AuditStore } from "@agentify/payments";
 import {
   assertValidUcpProfile,
   buildUcpProfile,
   UCP_VERSION,
   type BusinessDiscoveryProfile,
-} from "@gateway/ucp";
+} from "@agentify/ucp";
 import { loadConfig, type GatewayConfig } from "./config.js";
 
 export interface Gateway {
@@ -84,7 +84,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
   const paymentHandlers =
     options.payment && payments
       ? {
-          [options.payment.handlerName ?? "dev.gateway.razorpay.test"]: [
+          [options.payment.handlerName ?? "dev.agentify.razorpay.test"]: [
             {
               version: UCP_VERSION,
               id: "test",

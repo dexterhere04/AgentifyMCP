@@ -8,8 +8,8 @@ import type {
   PaymentLinkRequest,
   PaymentOrder,
   PaymentOrderRequest,
-} from "@gateway/canonical-commerce";
-import { createMockCommerceProvider } from "@gateway/adapter-mock";
+} from "@agentify/canonical-commerce";
+import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import { InMemoryAuditStore, PaymentOrchestrator } from "../src/index.js";
 
 const SECRET = "whsec_test";

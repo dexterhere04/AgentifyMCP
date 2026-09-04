@@ -6,7 +6,7 @@ import {
   type CommerceProvider,
   type OfferInput,
   isProviderError,
-} from "@gateway/canonical-commerce";
+} from "@agentify/canonical-commerce";
 import { ToolArgSchemas, agentProfileOf, type ToolName } from "./tools/schemas.js";
 
 /** Tool-side error mirroring canonical provider semantics over MCP. */
