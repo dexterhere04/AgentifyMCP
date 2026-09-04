@@ -1,0 +1,10 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      BASE_URL: "http://localhost:8787"
+    # Connect a REST merchant by mounting a config and running the gateway
+    # with it via the CLI image instead when you need custom providers.

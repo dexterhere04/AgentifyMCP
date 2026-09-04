@@ -1,0 +1,12 @@
+node_modules
+dist
+*.log
+.git
+.gitignore
+docs
+tests
+scripts
+packages/*/test
+packages/*/node_modules
+pnpm-lock.yaml
+agentic-commerce-gateway-architecture.md
