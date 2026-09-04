@@ -1,0 +1,22 @@
+{
+  "name": "@gateway/app-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "@gateway/adapter-mock": "workspace:*",
+    "@gateway/canonical-commerce": "workspace:*",
+    "@gateway/mcp": "workspace:*",
+    "@gateway/metadata": "workspace:*",
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.13.5"
+  }
+}
