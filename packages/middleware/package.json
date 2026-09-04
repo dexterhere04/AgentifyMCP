@@ -1,0 +1,39 @@
+{
+  "name": "@agentify/middleware",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./express": "./src/express.ts",
+    "./hono": "./src/hono.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist"
+  },
+  "files": ["dist"],
+  "license": "MIT",
+  "sideEffects": false,
+  "dependencies": {
+    "@agentify/canonical-commerce": "workspace:*",
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "@agentify/gateway": "workspace:*",
+    "@types/express": "^5.0.0",
+    "express": "^5.1.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+      "./express": { "types": "./dist/express.d.ts", "import": "./dist/express.js" },
+      "./hono": { "types": "./dist/hono.d.ts", "import": "./dist/hono.js" }
+    },
+    "types": "./dist/index.d.ts",
+    "main": "./dist/index.js"
+  }
+}
