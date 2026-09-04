@@ -9,7 +9,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "start": "tsx src/run.ts"
+    "start": "tsx src/run.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist"
   },
   "dependencies": {
     "@agentify/adapter-mock": "workspace:*",
@@ -20,5 +22,21 @@
     "@agentify/ucp": "workspace:*",
     "@hono/node-server": "^1.14.0",
     "hono": "^4.13.5"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    },
+    "types": "./dist/index.d.ts",
+    "main": "./dist/index.js"
   }
 }
