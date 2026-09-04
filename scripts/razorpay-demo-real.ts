@@ -14,6 +14,7 @@
  * Webhook reconciliation works too when RAZORPAY_WEBHOOK_SECRET is set and
  * Razorpay can reach POST {BASE_URL}/webhooks/razorpay.
  */
+import { existsSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { serve } from "@hono/node-server";
@@ -21,6 +22,11 @@ import { createGateway } from "@agentify/gateway";
 import { createMockCommerceProvider } from "@agentify/adapter-mock";
 import { razorpayGatewayFromEnv } from "@agentify/payments-razorpay";
 import { PaymentError } from "@agentify/payments";
+
+// Node does not load .env implicitly — pull it in when present (repo root).
+if (existsSync(".env") && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(".env");
+}
 
 const AGENT = { "ucp-agent": { profile: "https://agent.example/.well-known/ucp" } };
 const POLL_INTERVAL_MS = 3000;

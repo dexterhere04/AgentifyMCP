@@ -11,11 +11,17 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { serve } from "@hono/node-server";
 import { createGateway, type Gateway } from "@agentify/gateway";
 import { createMockCommerceProvider } from "@agentify/adapter-mock";
+import { existsSync } from "node:fs";
 import {
   FakeRazorpayGateway,
   paymentLinkPaidPayload,
   razorpaySignature,
 } from "@agentify/payments-razorpay";
+
+// Node does not load .env implicitly — pull it in when present (repo root).
+if (existsSync(".env") && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(".env");
+}
 
 const WEBHOOK_SECRET = "whsec_test";
 const AGENT = { "ucp-agent": { profile: "https://agent.example/.well-known/ucp" } };

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -12,6 +13,11 @@ import type { CommerceProvider, PaymentGateway } from "@agentify/canonical-comme
 import { detectCapabilities } from "@agentify/canonical-commerce";
 import { createMetadata } from "@agentify/metadata";
 import { buildUcpProfile, serializeUcpProfile } from "@agentify/ucp";
+
+// Node does not load .env implicitly — pull it in when present (repo root).
+if (existsSync(".env") && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(".env");
+}
 
 /**
  * `agentify` CLI

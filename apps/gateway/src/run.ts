@@ -1,7 +1,13 @@
+import { existsSync } from "node:fs";
 import { serve } from "@hono/node-server";
 import { razorpayGatewayFromEnv } from "@agentify/payments-razorpay";
 import { createGateway } from "./app.js";
 import { loadConfig } from "./config.js";
+
+// Node does not load .env implicitly — pull it in when present (repo root).
+if (existsSync(".env") && typeof process.loadEnvFile === "function") {
+  process.loadEnvFile(".env");
+}
 
 /**
  * Gateway server entry point. Run with `pnpm gateway` (root) or
