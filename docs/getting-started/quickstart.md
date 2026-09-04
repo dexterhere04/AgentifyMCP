@@ -70,5 +70,5 @@ pnpm test        # vitest (full suite + contract tests)
 pnpm build       # compile ESM + types into dist/
 ```
 
-See [Testing](testing.md) for the test pyramid and the shared adapter contract
+See [Testing](/testing) for the test pyramid and the shared adapter contract
 suite every merchant adapter must pass.

@@ -5,9 +5,9 @@ plug a store in. Pick the one that fits how you operate.
 
 | # | Method | Code? | Best for | Status |
 |---|--------|-------|----------|--------|
-| 1 | [Config-driven REST](integrations/rest-adapter.md) | No | JSON REST APIs, bearer/API-key auth | ✅ `@agentify/adapter-rest` |
-| 2 | [SDK adapter](integrations/sdk-adapter.md) | Yes (small) | Full control, in-process, strongest correctness | ✅ `CommerceProvider` |
-| 3 | [Framework mount](integrations/middleware.md) | Mount call | Express / Fastify / Next.js / Hono backends | ✅ `@agentify/middleware` |
+| 1 | [Config-driven REST](/integrations/rest-adapter) | No | JSON REST APIs, bearer/API-key auth | ✅ `@agentify/adapter-rest` |
+| 2 | [SDK adapter](/integrations/sdk-adapter) | Yes (small) | Full control, in-process, strongest correctness | ✅ `CommerceProvider` |
+| 3 | [Framework mount](/integrations/middleware) | Mount call | Express / Fastify / Next.js / Hono backends | ✅ `@agentify/middleware` |
 | 4 | Standalone + Docker | No | Run the gateway beside the store | ✅ `Dockerfile`, `pnpm gateway` |
 | 5 | CLI (`init`/`generate`/`serve`) | No | Scaffold config, emit static files, boot | ✅ `@agentify/cli` |
 | 6 | Static / edge files | No | Any CDN/static host: `llms.txt`, `agents.md`, `/.well-known/ucp`, `catalog.json` | ✅ `agentify generate` |

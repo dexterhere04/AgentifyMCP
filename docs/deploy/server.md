@@ -50,4 +50,4 @@ gateway's transports are Web-Standard and can run on Workers/Deno/Bun.
 - Never let MCP parameters reach raw SQL, shell or unchecked internal URLs.
 - Apply rate limits at the gateway and translate merchant `429`s.
 
-See [Security](security.md).
+See [Security](/security).

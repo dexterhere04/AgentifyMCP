@@ -22,13 +22,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      # Publish the /docs folder as a static site. This makes the agent-facing
-      # skill available at https://<owner>.github.io/AgentifyMCP/SKILL.md
-      # (requires Settings -> Pages -> Source = "GitHub Actions").
-      - uses: actions/upload-pages-artifact@v3
+      - uses: pnpm/action-setup@v4
         with:
-          path: docs
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build docs site (VitePress)
+        run: pnpm docs:build
+      - uses: actions/configure-pages@v5
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Rendered static site (VitePress output + copied raw SKILL.md)
+          path: docs/.vitepress/dist
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

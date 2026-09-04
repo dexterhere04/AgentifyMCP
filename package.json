@@ -18,7 +18,9 @@
     "demo:razorpay": "tsx scripts/razorpay-demo.ts",
     "demo:razorpay:real": "tsx scripts/razorpay-demo-real.ts",
     "build": "pnpm -r --if-present run build",
-    "clean": "pnpm -r --if-present run clean"
+    "clean": "pnpm -r --if-present run clean",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs && node scripts/postbuild-docs.mjs"
   },
   "devDependencies": {
     "@agentify/adapter-mock": "workspace:*",
@@ -30,12 +32,13 @@
     "@agentify/payments": "workspace:*",
     "@agentify/payments-razorpay": "workspace:*",
     "@agentify/ucp": "workspace:*",
+    "@changesets/cli": "^2.27.0",
     "@hono/node-server": "^1.14.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@types/node": "^26.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
-    "vitest": "^5.0.0",
-    "@changesets/cli": "^2.27.0"
+    "vitepress": "^1.6.4",
+    "vitest": "^5.0.0"
   }
 }

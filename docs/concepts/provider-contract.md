@@ -46,4 +46,4 @@ Every adapter must pass the **shared contract suite**
 (`tests/contracts/contract-suite.ts`): stable IDs, valid Money, canonical
 availability, unknown-product handling, deterministic pagination and typed
 failures. A new integration is only "done" when it passes the suite unchanged.
-See [Testing](testing.md).
+See [Testing](/testing).
