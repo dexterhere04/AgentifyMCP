@@ -1,0 +1,45 @@
+# Agentify (Agentic Commerce Gateway)
+
+> Monorepo that turns any ecommerce backend into an agent-native merchant:
+> Universal Commerce Protocol (UCP) discovery, MCP tools, agents.md, llms.txt,
+> cart/checkout with buyer approval, Razorpay test-mode payment and audit.
+
+Read [docs/index.md](docs/index.md) first, then follow links only when you need
+detail. Human README: [README.md](README.md).
+
+## Getting started
+
+- Install deps: `pnpm install`
+- Run all tests: `pnpm test`
+- Typecheck: `pnpm typecheck`
+- Build packages (ESM + types): `pnpm build`
+- Demos: `pnpm demo`, `pnpm demo:second`, `pnpm demo:razorpay`
+- Start gateway: `pnpm gateway`
+
+## Source map
+
+- [packages/canonical-commerce](packages/canonical-commerce/): canonical model, CommerceProvider contract, capability detection
+- [packages/adapter-rest](packages/adapter-rest/): config-driven REST adapter + fixture second merchant
+- [packages/adapter-mock](packages/adapter-mock/): demo merchant (SQLite)
+- [packages/mcp](packages/mcp/): capability-gated MCP server (Streamable HTTP)
+- [packages/ucp](packages/ucp/): UCP business discovery profile
+- [packages/metadata](packages/metadata/): agents.md + llms.txt generators
+- [packages/payments](packages/payments/): payment orchestration + audit
+- [packages/payments-razorpay](packages/payments-razorpay/): Razorpay gateway + offline fake
+- [packages/middleware](packages/middleware/): Express/Hono/Node mounts
+- [packages/cli](packages/cli/): `agentify init/generate/serve`
+- [apps/gateway](apps/gateway/): composer (`createGateway`) + server
+
+## Docs
+
+- [Architecture](docs/architecture.md)
+- [Quickstart](docs/getting-started/quickstart.md)
+- [Integration matrix](docs/integrations/matrix.md)
+- [UCP](docs/protocols/ucp.md) · [MCP tools](docs/protocols/mcp-tools.md)
+- [Razorpay payments](docs/payments/razorpay.md)
+- [Deploy](docs/deploy/server.md) · [Security](docs/security.md) · [Testing](docs/testing.md)
+
+## Optional
+
+- [docs/index.md](docs/index.md): full docs home
+- [agentic demo config](packages/adapter-rest/examples/second-store.config.json): REST merchant template
