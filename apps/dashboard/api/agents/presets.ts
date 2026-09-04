@@ -1,2 +1,2 @@
-import handler from "../../../../api/agents/presets.ts";
+import handler from "../../../../api/agents/presets.js";
 export default handler;

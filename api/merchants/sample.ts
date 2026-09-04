@@ -45,7 +45,12 @@ const handler: Handler = async (req, res) => {
     return json(res, 403, { ok: false, error: "Hosted demo: sample fetches are limited to this deployment's demo store." });
   }
   try {
-    const upstream = await fetch(parsedUrl.toString(), { headers: { accept: "application/json" } });
+    const upstream = (await fetch(parsedUrl.toString(), { headers: { accept: "application/json" } })) as unknown as {
+      ok: boolean;
+      status: number;
+      headers: { get(name: string): string | null };
+      text(): Promise<string>;
+    };
     const text = await upstream.text();
     let parsed: unknown;
     try {

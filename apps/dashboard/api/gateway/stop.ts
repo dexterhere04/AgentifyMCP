@@ -1,2 +1,2 @@
-import handler from "../../../../api/gateway/stop.ts";
+import handler from "../../../../api/gateway/stop.js";
 export default handler;

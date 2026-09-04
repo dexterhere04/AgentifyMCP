@@ -1,6 +1,5 @@
-import { json, demoConfig, seededPresets, DEMO_STORE_PATH, origin, llmSettingsFromEnv, type Handler } from "../_lib.js";
-import { runAgentChat } from "../../apps/dashboard/src/api/agent-runtime.js";
-import type { ChatMessage } from "../../apps/dashboard/src/api/store.js";
+import { json, demoConfig, seededPresets, DEMO_STORE_PATH, origin, llmSettingsFromEnv, type Handler } from "../../_lib.js";
+import { runAgentChat, type ChatMessage } from "../../../apps/dashboard/src/api/agent-runtime.js";
 
 function readBody(req: import("node:http").IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {

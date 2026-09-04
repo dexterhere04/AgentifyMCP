@@ -1,2 +1,2 @@
-import handler from "../../../../../api/merchants/[id]/landscape.ts";
+import handler from "../../../../../api/merchants/[id]/landscape.js";
 export default handler;

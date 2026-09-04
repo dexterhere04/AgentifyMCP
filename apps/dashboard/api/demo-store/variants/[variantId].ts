@@ -1,2 +1,2 @@
-import handler from "../../../../../api/demo-store/variants/[variantId].ts";
+import handler from "../../../../../api/demo-store/variants/[variantId].js";
 export default handler;

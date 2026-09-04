@@ -1,8 +1,8 @@
 import { json, llmSettingsFromEnv, type Handler } from "../_lib.js";
 
 const handler: Handler = (req, res) => {
+  const s = llmSettingsFromEnv();
   if (req.method === "GET") {
-    const s = llmSettingsFromEnv();
     return json(res, 200, {
       kind: s.kind,
       model: s.model,

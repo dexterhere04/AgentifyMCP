@@ -1,2 +1,2 @@
-import handler from "../../../../api/demo-rest/boot.ts";
+import handler from "../../../../api/demo-rest/boot.js";
 export default handler;

@@ -1,2 +1,2 @@
-import handler from "../../../../api/merchants/validate.ts";
+import handler from "../../../../api/merchants/validate.js";
 export default handler;

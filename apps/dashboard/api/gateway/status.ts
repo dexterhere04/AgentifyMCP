@@ -1,2 +1,2 @@
-import handler from "../../../../api/gateway/status.ts";
+import handler from "../../../../api/gateway/status.js";
 export default handler;

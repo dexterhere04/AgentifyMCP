@@ -1,2 +1,2 @@
-import handler from "../../../../../api/merchants/[id]/agent.ts";
+import handler from "../../../../../api/merchants/[id]/agent.js";
 export default handler;

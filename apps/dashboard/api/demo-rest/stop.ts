@@ -1,2 +1,2 @@
-import handler from "../../../../api/demo-rest/stop.ts";
+import handler from "../../../../api/demo-rest/stop.js";
 export default handler;
