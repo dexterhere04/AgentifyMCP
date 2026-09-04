@@ -114,6 +114,20 @@ export interface AddCartItemInput extends CartOperation {
   quantity: number;
 }
 
+/**
+ * Identity/negotiation metadata passed on transactional calls. The `agentProfile`
+ * is the calling agent's own UCP discovery URI (`meta.ucp-agent.profile`), used
+ * for capability negotiation and audit before any money-changing action.
+ */
+export interface TransactionMeta {
+  agentProfile?: string;
+}
+
+/** Explicit, contemporaneous buyer approval for a checkout completion. */
+export interface BuyerApproval {
+  buyerApproved: boolean;
+}
+
 export interface CheckoutTotals {
   subtotal: Money;
   shipping?: Money;
@@ -167,18 +181,18 @@ export interface CommerceProvider {
   };
 
   cart?: {
-    create(input?: { currency?: string }): Promise<Cart>;
+    create(input?: { currency?: string } & TransactionMeta): Promise<Cart>;
     get(cartId: string): Promise<Cart>;
-    addItem(input: AddCartItemInput): Promise<Cart>;
-    updateItem(input: AddCartItemInput & { itemId: string }): Promise<Cart>;
-    removeItem(input: CartOperation & { itemId: string }): Promise<Cart>;
+    addItem(input: AddCartItemInput & TransactionMeta): Promise<Cart>;
+    updateItem(input: { cartId?: string; itemId: string; quantity: number } & TransactionMeta): Promise<Cart>;
+    removeItem(input: CartOperation & { itemId: string } & TransactionMeta): Promise<Cart>;
   };
 
   checkout?: {
-    create(input: { cartId: string }): Promise<Checkout>;
+    create(input: { cartId: string } & TransactionMeta): Promise<Checkout>;
     get(id: string): Promise<Checkout>;
-    complete(id: string): Promise<Order>;
-    cancel(id: string): Promise<Checkout>;
+    complete(id: string, options?: { approval?: BuyerApproval } & TransactionMeta): Promise<Order>;
+    cancel(id: string, options?: TransactionMeta): Promise<Checkout>;
   };
 
   orders?: {
