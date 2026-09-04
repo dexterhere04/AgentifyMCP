@@ -1,8 +1,8 @@
-import { json, demoConfig, origin, DEMO_STORE_PATH, DEMO_MERCHANT_ID, type Handler } from "./_lib.js";
+import { json, demoConfig, origin, DEMO_STORE_PATH, DEMO_MERCHANT_ID } from "./_lib.js";
 
-const handler: Handler = (req, res) => {
+export default (req, res) => {
   const base = `${origin(req)}${DEMO_STORE_PATH}`;
-  const cfg = demoConfig() as { merchant: { name: string; description?: string; defaultCurrency: string }; http: { baseUrl: string } };
+  const cfg = demoConfig();
   json(res, 200, [
     {
       id: DEMO_MERCHANT_ID,
@@ -16,5 +16,3 @@ const handler: Handler = (req, res) => {
     },
   ]);
 };
-
-export default handler;

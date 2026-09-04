@@ -1,26 +1,24 @@
-import { json, origin, type Handler } from "../_lib.js";
+import { json, origin } from "../_lib.js";
 
-function flattenLeaves(value: unknown, prefix = ""): Array<{ path: string; sample: string }> {
-  const out: Array<{ path: string; sample: string }> = [];
+function flattenLeaves(value, prefix = "") {
+  const out = [];
   if (value === null || value === undefined) return out;
   if (Array.isArray(value)) {
     if (value.length) flattenLeaves(value[0], prefix);
     return out;
   }
   if (typeof value === "object") {
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      flattenLeaves(v, `${prefix}.${k}`);
-    }
+    for (const [k, v] of Object.entries(value)) flattenLeaves(v, `${prefix}.${k}`);
     return out;
   }
   out.push({ path: prefix || "$", sample: String(value) });
   return out;
 }
 
-function readBody(req: import("node:http").IncomingMessage): Promise<unknown> {
+function readBody(req) {
   return new Promise((resolve) => {
     let data = "";
-    req.on("data", (chunk: Buffer) => (data += chunk.toString()));
+    req.on("data", (chunk) => (data += chunk.toString()));
     req.on("end", () => {
       try {
         resolve(JSON.parse(data || "{}"));
@@ -31,12 +29,11 @@ function readBody(req: import("node:http").IncomingMessage): Promise<unknown> {
   });
 }
 
-const handler: Handler = async (req, res) => {
-  const body = (await readBody(req)) as { url?: string };
-  const url = body.url ?? "";
-  let parsedUrl: URL;
+export default async (req, res) => {
+  const body = await readBody(req);
+  let parsedUrl;
   try {
-    parsedUrl = new URL(url);
+    parsedUrl = new URL(body.url ?? "");
   } catch {
     return json(res, 400, { ok: false, error: "invalid url" });
   }
@@ -45,20 +42,15 @@ const handler: Handler = async (req, res) => {
     return json(res, 403, { ok: false, error: "Hosted demo: sample fetches are limited to this deployment's demo store." });
   }
   try {
-    const upstream = (await fetch(parsedUrl.toString(), { headers: { accept: "application/json" } })) as unknown as {
-      ok: boolean;
-      status: number;
-      headers: { get(name: string): string | null };
-      text(): Promise<string>;
-    };
+    const upstream = await fetch(parsedUrl.toString(), { headers: { accept: "application/json" } });
     const text = await upstream.text();
-    let parsed: unknown;
+    let parsed;
     try {
       parsed = JSON.parse(text);
     } catch {
       parsed = undefined;
     }
-    return json(res, 200, {
+    json(res, 200, {
       ok: upstream.ok,
       status: upstream.status,
       contentType: upstream.headers.get("content-type"),
@@ -66,8 +58,6 @@ const handler: Handler = async (req, res) => {
       leaves: parsed !== undefined ? flattenLeaves(parsed).slice(0, 200) : [],
     });
   } catch (err) {
-    return json(res, 502, { ok: false, error: err instanceof Error ? err.message : String(err) });
+    json(res, 502, { ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 };
-
-export default handler;

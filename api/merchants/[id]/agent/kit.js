@@ -1,9 +1,9 @@
-import { json, origin, demoConfig, DEMO_STORE_PATH, DEMO_MERCHANT_ID, type Handler } from "../../../_lib.js";
+import { json, origin, demoConfig, DEMO_STORE_PATH, DEMO_MERCHANT_ID } from "../../../_lib.js";
 import { RestCommerceProvider } from "@agentify/adapter-rest";
 import { detectCapabilities, enabledCapabilities } from "@agentify/canonical-commerce";
 import { defaultAgentConfig } from "../../../../apps/dashboard/src/api/store.js";
 
-const CAP_TOOLS: Record<string, string[]> = {
+const CAP_TOOLS = {
   catalog: ["search_catalog", "get_product", "get_variant"],
   inventory: ["check_availability"],
   pricing: ["get_offer"],
@@ -12,19 +12,16 @@ const CAP_TOOLS: Record<string, string[]> = {
   orders: ["get_order"],
 };
 
-const handler: Handler = (req, res) => {
+export default (req, res) => {
   const id = (req.url ?? "").split("/")[3];
   if (id !== DEMO_MERCHANT_ID) return json(res, 404, { error: "not_found" });
   const baseOrigin = origin(req);
-  const cfg = demoConfig() as {
-    http: { baseUrl: string };
-    merchant: { name: string };
-  };
+  const cfg = demoConfig();
   cfg.http.baseUrl = `${baseOrigin}${DEMO_STORE_PATH}`;
-  const caps = detectCapabilities(new RestCommerceProvider(cfg as never));
+  const caps = detectCapabilities(new RestCommerceProvider(cfg));
   const tools = enabledCapabilities(caps).flatMap((k) => CAP_TOOLS[k] ?? []).concat("get_audit_trail");
   const agent = defaultAgentConfig();
-  return json(res, 200, {
+  json(res, 200, {
     merchantId: DEMO_MERCHANT_ID,
     agent,
     baseUrl: baseOrigin,
@@ -46,5 +43,3 @@ const handler: Handler = (req, res) => {
     checkoutSnippet: "// Hosted demo: checkout runs against a gateway on your VM.\n// See the mcpServers/kit docs to wire it.",
   });
 };
-
-export default handler;

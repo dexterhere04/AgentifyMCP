@@ -1,6 +1,6 @@
-import { json, llmSettingsFromEnv, type Handler } from "../_lib.js";
+import { json, llmSettingsFromEnv } from "../_lib.js";
 
-const handler: Handler = (req, res) => {
+export default (req, res) => {
   const s = llmSettingsFromEnv();
   if (req.method === "GET") {
     return json(res, 200, {
@@ -11,8 +11,7 @@ const handler: Handler = (req, res) => {
       keyHint: s.apiKey ? `…${s.apiKey.slice(-4)}` : undefined,
     });
   }
-  // Read-only demo: provider comes from LLM_* env vars on Vercel.
-  return json(res, 200, {
+  json(res, 200, {
     ok: true,
     provider: {
       kind: s.kind,
@@ -24,5 +23,3 @@ const handler: Handler = (req, res) => {
     note: "Hosted demo — set LLM_PROVIDER / LLM_MODEL / LLM_API_KEY as Vercel env vars.",
   });
 };
-
-export default handler;
