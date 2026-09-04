@@ -1,0 +1,259 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  type CallToolResult,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import type { CommerceProvider } from "@gateway/canonical-commerce";
+import {
+  CommerceToolRegistry,
+  isToolFailure,
+  type ToolCallResult,
+  type ToolSpec,
+} from "./registry.js";
+
+export const SERVER_NAME = "agent-commerce-gateway";
+export const SERVER_VERSION = "0.1.0";
+
+const SERVER_INSTRUCTIONS = [
+  "You are shopping through a merchant exposed by the Agent Commerce Gateway.",
+  "All prices are Money objects with `amount` in MINOR units (e.g. 399900 INR paise = Rs 3,999) and an ISO `currency`.",
+  "Search may be approximate. Before recommending or completing any purchase you MUST call check_availability and get_offer to verify live stock and the live discounted price.",
+  "Respect explicit buyer budgets: never propose items whose effective offer price exceeds the stated budget.",
+  "Never invent product ids: use the ids returned by the tools.",
+].join("\n");
+
+function moneyText(amount: number | undefined, currency: string): string {
+  if (amount === undefined) return "n/a";
+  return `${(amount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+}
+
+/** Render a tool result as human-readable text (structured data is also returned). */
+function renderText(tool: string, data: unknown): string {
+  if (tool === "search_catalog") {
+    const r = data as {
+      items: Array<{
+        id: string;
+        title: string;
+        category?: string;
+        priceFrom?: { amount: number; currency: string };
+        priceTo?: { amount: number; currency: string };
+        inStock: boolean;
+        variantsCount: number;
+      }>;
+      total: number;
+      page: number;
+      limit: number;
+      hasMore: boolean;
+    };
+    const lines = r.items.map((item, i) => {
+      const price =
+        item.priceFrom && item.priceTo && item.priceFrom.amount !== item.priceTo.amount
+          ? `${moneyText(item.priceFrom.amount, item.priceFrom.currency)} – ${moneyText(item.priceTo.amount, item.priceTo.currency)}`
+          : item.priceFrom
+            ? moneyText(item.priceFrom.amount, item.priceFrom.currency)
+            : "price unavailable";
+      return `${i + 1}. ${item.title}${item.category ? ` [${item.category}]` : ""} — ${price} | inStock=${item.inStock} | variants=${item.variantsCount} | productId=${item.id}`;
+    });
+    const paging = r.hasMore ? ` (more than ${r.items.length} shown; page ${r.page} of many)` : "";
+    return `${r.total} product(s) matched${paging}\n` + (lines.join("\n") || "(none)");
+  }
+
+  if (tool === "get_product") {
+    const p = data as { id: string; title: string; category?: string; variants: Array<{ id: string; sku?: string; title?: string; pricing: { listPrice: { amount: number; currency: string }; salePrice?: { amount: number; currency: string } }; availability: { status: string; quantity?: number } }> };
+    const lines = p.variants.map((v) => {
+      const sale = v.pricing.salePrice ? ` sale=${moneyText(v.pricing.salePrice.amount, v.pricing.salePrice.currency)}` : "";
+      return `  variantId=${v.id}${v.sku ? ` sku=${v.sku}` : ""}${v.title ? ` "${v.title}"` : ""} list=${moneyText(v.pricing.listPrice.amount, v.pricing.listPrice.currency)}${sale} stock=${v.availability.status}${v.availability.quantity !== undefined ? ` (${v.availability.quantity})` : ""}`;
+    });
+    return `${p.title}${p.category ? ` [${p.category}]` : ""} (productId=${p.id})\n` + lines.join("\n");
+  }
+
+  if (tool === "get_variant") {
+    const v = data as { id: string; sku?: string; pricing: { listPrice: { amount: number; currency: string }; salePrice?: { amount: number; currency: string } }; availability: { status: string; quantity?: number } };
+    return `variantId=${v.id}${v.sku ? ` sku=${v.sku}` : ""} list=${moneyText(v.pricing.listPrice.amount, v.pricing.listPrice.currency)} stock=${v.availability.status}`;
+  }
+
+  if (tool === "check_availability") {
+    const a = data as { status: string; quantity?: number };
+    return `status=${a.status}${a.quantity !== undefined ? ` quantity=${a.quantity}` : ""}`;
+  }
+
+  if (tool === "get_offer") {
+    const o = data as {
+      productId: string;
+      variantId: string;
+      productTitle: string;
+      sku?: string;
+      price: { amount: number; currency: string };
+      listPrice: { amount: number; currency: string };
+      originalPrice?: { amount: number; currency: string };
+      savings?: { amount: number; currency: string };
+      discounts: Array<{ id: string; title?: string }>;
+      availability: { status: string; quantity?: number };
+    };
+    const discount =
+      o.discounts.length > 0 ? ` | discount: ${o.discounts.map((d) => d.title ?? d.id).join(", ")}` : "";
+    return [
+      `${o.productTitle} (productId=${o.productId}, variantId=${o.variantId}${o.sku ? `, sku=${o.sku}` : ""})`,
+      `  price=${moneyText(o.price.amount, o.price.currency)}`,
+      `  listPrice=${moneyText(o.listPrice.amount, o.listPrice.currency)}`,
+      o.originalPrice ? `  originalPrice=${moneyText(o.originalPrice.amount, o.originalPrice.currency)}` : null,
+      o.savings ? `  savings=${moneyText(o.savings.amount, o.savings.currency)}` : null,
+      `  stock=${o.availability.status}${o.availability.quantity !== undefined ? ` (${o.availability.quantity})` : ""}`,
+      discount,
+    ]
+      .filter((x): x is string => x !== null && x !== "")
+      .join("\n");
+  }
+
+  return JSON.stringify(data, null, 2);
+}
+
+export function toolSpecsToSdkTools(specs: ToolSpec[]): Tool[] {
+  return specs.map((spec) => ({
+    name: spec.name,
+    description: spec.description,
+    inputSchema: z.toJSONSchema(spec.inputSchema) as unknown as Tool["inputSchema"],
+  }));
+}
+
+function toCallResult(tool: string, outcome: ToolCallResult<unknown>): CallToolResult {
+  if (!isToolFailure(outcome)) {
+    return {
+      content: [{ type: "text", text: renderText(tool, outcome.data) }],
+      structuredContent: outcome.data as unknown as Record<string, unknown>,
+    } as unknown as CallToolResult;
+  }
+  const { error } = outcome;
+  return {
+    content: [
+      {
+        type: "text",
+        text: `ERROR [${error.code}]: ${error.message}${
+          error.details ? `\n${JSON.stringify(error.details)}` : ""
+        }`,
+      },
+    ],
+    isError: true,
+  } as unknown as CallToolResult;
+}
+
+/**
+ * Build an SDK Server bound to a provider. Create one per HTTP session.
+ */
+export function createCommerceMcpServer(provider: CommerceProvider): Server {
+  const registry = new CommerceToolRegistry(provider);
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    const specs = registry.list();
+    return { tools: toolSpecsToSdkTools(specs) };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: rawArgs } = request.params;
+    const outcome = await registry.call(name, rawArgs);
+    return toCallResult(name, outcome);
+  });
+
+  return server;
+}
+
+export interface StreamableHttpEndpoint {
+  /** Handle any method (POST/GET/DELETE) on the MCP endpoint. */
+  handle(request: Request): Promise<Response>;
+  /** Destroy all active sessions. */
+  close(): Promise<void>;
+  activeSessionCount(): number;
+}
+
+interface Session {
+  server: Server;
+  transport: WebStandardStreamableHTTPServerTransport;
+  /** Resolves once the server is connected to the transport. */
+  ready: Promise<void>;
+}
+
+/**
+ * A stateful Streamable HTTP endpoint backed by Web-Standards transports, so
+ * it can be mounted on any runtime (Node/Hono/Workers). Sessions are keyed by
+ * the `Mcp-Session-Id` header and each session gets its own Server+transport.
+ */
+export function createStreamableHttpEndpoint(provider: CommerceProvider): StreamableHttpEndpoint {
+  const sessions = new Map<string, Session>();
+
+  function createSession(): Session {
+    const server = createCommerceMcpServer(provider);
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => randomUUID(),
+      enableJsonResponse: true,
+      onsessionclosed: (sessionId) => {
+        sessions.delete(sessionId);
+      },
+    });
+    const conn: Session = {
+      server,
+      transport,
+      ready: server.connect(transport),
+    };
+    return conn;
+  }
+
+  async function handle(request: Request): Promise<Response> {
+    const sessionId = request.headers.get("mcp-session-id");
+    const method = request.method.toUpperCase();
+
+    if (method === "POST") {
+      const existing = sessionId ? sessions.get(sessionId) : undefined;
+      if (sessionId && !existing) {
+        return new Response(null, { status: 404, statusText: "Session not found" });
+      }
+      const conn = existing ?? createSession();
+      const isNewSession = !existing;
+      await conn.ready;
+      const response = await conn.transport.handleRequest(request);
+      if (isNewSession && conn.transport.sessionId && !sessions.has(conn.transport.sessionId)) {
+        sessions.set(conn.transport.sessionId, conn);
+      }
+      return response;
+    }
+
+    if (method === "GET" || method === "DELETE") {
+      if (!sessionId) {
+        return new Response(null, { status: 400, statusText: "Missing session id" });
+      }
+      const conn = sessions.get(sessionId);
+      if (!conn) {
+        return new Response(null, { status: 404, statusText: "Session not found" });
+      }
+      await conn.ready;
+      return conn.transport.handleRequest(request);
+    }
+
+    return new Response(null, { status: 405, statusText: "Method not allowed" });
+  }
+
+  async function close(): Promise<void> {
+    for (const conn of sessions.values()) {
+      try {
+        await conn.transport.close();
+      } catch {
+        // best-effort cleanup
+      }
+    }
+    sessions.clear();
+  }
+
+  return {
+    handle,
+    close,
+    activeSessionCount: () => sessions.size,
+  };
+}
