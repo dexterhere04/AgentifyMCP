@@ -1,0 +1,37 @@
+{
+  "name": "@agentify/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentify": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./src/cli.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rm -rf dist"
+  },
+  "files": ["dist"],
+  "license": "MIT",
+  "sideEffects": false,
+  "dependencies": {
+    "@agentify/adapter-mock": "workspace:*",
+    "@agentify/adapter-rest": "workspace:*",
+    "@agentify/canonical-commerce": "workspace:*",
+    "@agentify/gateway": "workspace:*",
+    "@agentify/metadata": "workspace:*",
+    "@agentify/ucp": "workspace:*",
+    "@hono/node-server": "^1.14.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "bin": { "agentify": "./dist/cli.js" },
+    "exports": { ".": { "types": "./dist/cli.d.ts", "import": "./dist/cli.js" } },
+    "types": "./dist/cli.d.ts",
+    "main": "./dist/cli.js"
+  }
+}
